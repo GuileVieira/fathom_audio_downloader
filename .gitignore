@@ -1,0 +1,17 @@
+# Ignora os dados de autenticação sensíveis
+/cookies/*
+!/cookies/.gitkeep
+
+# Ignora os arquivos de mídia e transcrição baixados
+/downloads_batch/*
+!/downloads_batch/.gitkeep
+
+# Ignora o arquivo de progresso
+processing_progress.json
+
+# Ignora o arquivo de ambiente com chaves de API
+.env
+
+# Ignora arquivos de sistema do Python
+__pycache__/
+*.pyc

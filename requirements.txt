@@ -1,0 +1,4 @@
+playwright
+aiohttp
+python-dotenv
+tqdm 
