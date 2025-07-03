@@ -112,7 +112,7 @@ O sistema agora organiza automaticamente os arquivos em pastas individuais para 
 
 ```
 downloads_batch/
-├── {título}_unified.json (arquivo principal - fica na raiz)
+├── {título}_final.json (arquivo principal - fica na raiz)
 └── {título}/
     ├── {título}_1.75x.mp3
     ├── {título}_transcript.txt
@@ -133,7 +133,7 @@ downloads_batch/
 ### Processamento de Áudio e Transcrição:
 
 #### Arquivo Principal (Raiz):
--   `{título}_unified.json` - **Estrutura padronizada** que combina:
+-   `{título}_final.json` - **Estrutura padronizada** que combina:
     - Metadados do Fathom (ID, URL, título, data, duração, host, participantes)
     - Transcrição processada do AssemblyAI em português
     - Mapeamento automático de speakers (IDs → nomes reais)
@@ -215,7 +215,7 @@ A nova funcionalidade gera um arquivo `_unified.json` com a seguinte estrutura p
 
 ### 📁 **Organização Inteligente:**
 - **Pastas individuais** para cada vídeo mantêm arquivos organizados
-- **Arquivo principal** `_unified.json` na raiz para acesso rápido
+- **Arquivo principal** `_final.json` na raiz para acesso rápido
 - **Migração automática** de arquivos existentes sem perda de dados
 - **Estrutura limpa** facilita navegação e backup
 

@@ -85,7 +85,7 @@ class FathomBatchProcessor:
         
         return {
             # Arquivo principal (fica na raiz)
-            'unified': Path(DOWNLOADS_DIR) / f"{title}_unified.json",
+            'final': Path(DOWNLOADS_DIR) / f"{title}_final.json",
             
             # Arquivos organizados na pasta do vídeo
             'video_dir': video_dir,
@@ -935,11 +935,11 @@ class FathomBatchProcessor:
             
             # Usar nova estrutura de pastas
             paths = self._get_video_paths(title)
-            unified_path = paths['unified']  # Fica na raiz
-            with open(unified_path, 'w', encoding='utf-8') as f:
+            final_path = paths['final']  # Fica na raiz
+            with open(final_path, 'w', encoding='utf-8') as f:
                 json.dump(unified_data, f, indent=2, ensure_ascii=False)
             
-            print(f"   🎯 Estrutura unificada salva: {unified_path.name}")
+            print(f"   🎯 Estrutura final salva: {final_path.name}")
             
             # Extrair e salvar transcrição do Fathom separadamente
             html_path = Path("html_pages") / f"{title}.html"
@@ -982,12 +982,25 @@ class FathomBatchProcessor:
         downloads_dir = Path(DOWNLOADS_DIR)
         migrated_count = 0
         
-        # Buscar todos os arquivos _unified.json na raiz (estes já estão no lugar certo)
+        # Buscar todos os arquivos _unified.json na raiz e renomear para _final.json
         unified_files = list(downloads_dir.glob("*_unified.json"))
         
         for unified_file in unified_files:
             # Extrair o título do arquivo unified
             title = unified_file.stem.replace("_unified", "")
+            
+            # Renomear arquivo unified para final
+            final_file = downloads_dir / f"{title}_final.json"
+            if not final_file.exists():
+                unified_file.rename(final_file)
+                print(f"📝 Renomeado: {unified_file.name} → {final_file.name}")
+        
+        # Agora buscar todos os arquivos _final.json para processar
+        final_files = list(downloads_dir.glob("*_final.json"))
+        
+        for final_file in final_files:
+            # Extrair o título do arquivo final
+            title = final_file.stem.replace("_final", "")
             
             # Verificar se há arquivos antigos para migrar
             old_files_patterns = [
@@ -1014,8 +1027,8 @@ class FathomBatchProcessor:
                 
                 # Migrar cada arquivo
                 for old_file in files_to_migrate:
-                    if old_file.name.endswith("_unified.json"):
-                        continue  # Unified fica na raiz
+                    if old_file.name.endswith("_final.json"):
+                        continue  # Final fica na raiz
                     
                     new_path = paths['video_dir'] / old_file.name
                     
