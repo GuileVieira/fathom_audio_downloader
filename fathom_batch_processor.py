@@ -234,7 +234,7 @@ class FathomBatchProcessor:
         return mp3_path
     
     async def _transcribe_with_multichannel(self, mp3_path: Path, title: str) -> Optional[str]:
-        """Transcreve áudio usando AssemblyAI Multichannel"""
+        """Transcreve áudio usando AssemblyAI com detecção automática de canais"""
         transcript_path = Path(DOWNLOADS_DIR) / f"{title}_transcript.txt"
         speakers_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.json"
         json_response_path = Path(DOWNLOADS_DIR) / f"{title}_transcript_details.json"
@@ -243,32 +243,42 @@ class FathomBatchProcessor:
             print(f"📝 {title} - Transcrição já existe")
             return transcript_path.read_text(encoding='utf-8')
         
-        print(f"📝 {title} - Transcrevendo com AssemblyAI Multichannel...")
+        print(f"📝 {title} - Transcrevendo com AssemblyAI...")
         
         try:
-            # Configuração para Dual Channel transcription
-            config = aai.TranscriptionConfig(
-                dual_channel=True,
-                speaker_labels=True,
-                language_code="pt"
-            )
+            # Primeiro, tenta com multichannel (para áudios com canais separados)
+            transcript = None
+            config_used = None
             
-            # Transcrever usando o SDK (método síncrono executado em thread)
-            def transcribe_sync():
-                return self.transcriber.transcribe(str(mp3_path), config)
-            
-            # Executar em thread para não bloquear o loop asyncio
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                transcript = await asyncio.get_event_loop().run_in_executor(
-                    executor, transcribe_sync
+            try:
+                print(f"   🔍 {title} - Tentando transcrição multichannel...")
+                config = aai.TranscriptionConfig(
+                    multichannel=True,
+                    language_code="pt"
                 )
+                transcript = await self._execute_transcription(mp3_path, config)
+                config_used = "multichannel"
+                print(f"   ✅ {title} - Multichannel transcription bem-sucedida!")
+                
+            except Exception as multichannel_error:
+                print(f"   ⚠️  {title} - Multichannel falhou: {str(multichannel_error)}")
+                print(f"   🔄 {title} - Tentando com speaker_labels...")
+                
+                # Se multichannel falhou, tenta com speaker_labels
+                config = aai.TranscriptionConfig(
+                    speaker_labels=True,
+                    language_code="pt"
+                )
+                transcript = await self._execute_transcription(mp3_path, config)
+                config_used = "speaker_labels"
+                print(f"   ✅ {title} - Speaker labels transcription bem-sucedida!")
             
-            # Salva a resposta JSON completa para diagnóstico
-            with open(json_response_path, 'w', encoding='utf-8') as f:
-                json.dump(transcript.json_response, f, ensure_ascii=False, indent=2)
+            # Processar resultado
+            if transcript and transcript.status == aai.TranscriptStatus.completed:
+                # Salva a resposta JSON completa para diagnóstico
+                with open(json_response_path, 'w', encoding='utf-8') as f:
+                    json.dump(transcript.json_response, f, ensure_ascii=False, indent=2)
 
-            if transcript.status == aai.TranscriptStatus.completed:
                 # Salvar transcrição completa
                 transcript_text = transcript.text
                 transcript_path.write_text(transcript_text, encoding='utf-8')
@@ -276,17 +286,31 @@ class FathomBatchProcessor:
                 # Processar e salvar informações de speakers separadamente
                 await self._process_speakers(transcript, title)
                 
-                print(f"✅ {title} - Transcrição completa!")
+                print(f"✅ {title} - Transcrição completa usando {config_used}!")
                 if transcript.json_response.get('audio_channels'):
                     print(f"   📊 Canais de áudio detectados: {transcript.json_response['audio_channels']}")
                 
                 return transcript_text
             else:
-                raise Exception(f"Erro na transcrição: {transcript.error}")
+                raise Exception(f"Erro na transcrição: {transcript.error if transcript else 'Falha na transcrição'}")
                 
         except Exception as e:
             print(f"❌ {title} - Erro na transcrição: {str(e)}")
             raise e
+    
+    async def _execute_transcription(self, mp3_path: Path, config):
+        """Executa a transcrição usando o SDK do AssemblyAI"""
+        def transcribe_sync():
+            return self.transcriber.transcribe(str(mp3_path), config)
+        
+        # Executar em thread para não bloquear o loop asyncio
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            transcript = await asyncio.get_event_loop().run_in_executor(
+                executor, transcribe_sync
+            )
+        
+        return transcript
     
     async def _process_speakers(self, transcript, title: str):
         """Processa e salva informações de speakers separadamente"""
@@ -294,7 +318,7 @@ class FathomBatchProcessor:
         speakers_txt_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.txt"
         
         speakers_data = {
-            'dual_channel': transcript.json_response.get('dual_channel', False),
+            'multichannel': transcript.json_response.get('multichannel', False),
             'audio_channels': transcript.json_response.get('audio_channels', 0),
             'speakers': {},
             'utterances': []
@@ -347,8 +371,8 @@ class FathomBatchProcessor:
             f.write(f"ANÁLISE DE SPEAKERS - {title}\n")
             f.write("=" * 50 + "\n\n")
             
-            if speakers_data['dual_channel']:
-                f.write(f"🎙️  DUAL CHANNEL: {speakers_data['audio_channels']} canais detectados\n\n")
+            if speakers_data['multichannel']:
+                f.write(f"🎙️  MULTICHANNEL: {speakers_data['audio_channels']} canais detectados\n\n")
             
             # Resumo por speaker
             f.write("RESUMO POR SPEAKER:\n")
