@@ -106,22 +106,33 @@ Ao final, sua pasta `cookies/` **deve conter os 3 arquivos**: `cookies.json`, `l
 
 ## 4. Arquivos Gerados
 
-### Processamento de Áudio e Transcrição (`downloads_batch/`):
+### 🆕 **Nova Estrutura Organizada por Vídeo:**
 
-#### Arquivos de Áudio:
--   `{título}_1.75x.mp3` - Áudio acelerado em 1.75x (otimizado para qualidade)
+O sistema agora organiza automaticamente os arquivos em pastas individuais para cada vídeo, mantendo apenas o arquivo principal `_unified.json` na raiz para fácil acesso:
 
-#### Transcrição AssemblyAI:
--   `{título}_transcript.txt` - Transcrição completa em português
--   `{título}_speakers.json` - Dados estruturados de speakers com timestamps
--   `{título}_speakers.txt` - Análise de speakers formatada para leitura
--   `{título}_transcript_details.json` - Log de diagnóstico da API
+```
+downloads_batch/
+├── {título}_unified.json (arquivo principal - fica na raiz)
+└── {título}/
+    ├── {título}_1.75x.mp3
+    ├── {título}_transcript.txt
+    ├── {título}_speakers.json
+    ├── {título}_speakers.txt
+    ├── {título}_transcript_details.json
+    ├── {título}_metadata.json
+    ├── {título}_summary.txt
+    ├── {título}_fathom_transcript.json
+    └── {título}_fathom_transcript.txt
+```
 
-#### Metadados e Estruturas:
--   `{título}_metadata.json` - Metadados completos extraídos do HTML
--   `{título}_summary.txt` - Resumo formatado da call
+### **Migração Automática:**
+- O sistema **migra automaticamente** arquivos existentes para a nova estrutura
+- Arquivos antigos são movidos para suas respectivas pastas sem perder dados
+- O processo é executado automaticamente na primeira vez que você rodar o script
 
-#### 🆕 **Estrutura Unificada (Nova Funcionalidade):**
+### Processamento de Áudio e Transcrição:
+
+#### Arquivo Principal (Raiz):
 -   `{título}_unified.json` - **Estrutura padronizada** que combina:
     - Metadados do Fathom (ID, URL, título, data, duração, host, participantes)
     - Transcrição processada do AssemblyAI em português
@@ -130,7 +141,22 @@ Ao final, sua pasta `cookies/` **deve conter os 3 arquivos**: `cookies.json`, `l
     - Summary estruturado com purpose, key_takeaways, topics, next_steps
     - Formato pronto para análise de dados e integração com outras ferramentas
 
-#### 🆕 **Transcrição Original do Fathom:**
+#### Pasta Individual do Vídeo:
+
+**Arquivos de Áudio:**
+-   `{título}_1.75x.mp3` - Áudio acelerado em 1.75x (otimizado para qualidade)
+
+**Transcrição AssemblyAI:**
+-   `{título}_transcript.txt` - Transcrição completa em português
+-   `{título}_speakers.json` - Dados estruturados de speakers com timestamps
+-   `{título}_speakers.txt` - Análise de speakers formatada para leitura
+-   `{título}_transcript_details.json` - Log de diagnóstico da API
+
+**Metadados e Estruturas:**
+-   `{título}_metadata.json` - Metadados completos extraídos do HTML
+-   `{título}_summary.txt` - Resumo formatado da call
+
+**Transcrição Original do Fathom:**
 -   `{título}_fathom_transcript.json` - Transcrição original extraída do HTML
 -   `{título}_fathom_transcript.txt` - Transcrição original formatada
     - Preserva o texto original em inglês do Fathom
@@ -186,6 +212,12 @@ A nova funcionalidade gera um arquivo `_unified.json` com a seguinte estrutura p
 ```
 
 ## 6. Benefícios da Nova Versão
+
+### 📁 **Organização Inteligente:**
+- **Pastas individuais** para cada vídeo mantêm arquivos organizados
+- **Arquivo principal** `_unified.json` na raiz para acesso rápido
+- **Migração automática** de arquivos existentes sem perda de dados
+- **Estrutura limpa** facilita navegação e backup
 
 ### 🎯 **Dados Estruturados:**
 - **Formato padronizado** para análise de dados

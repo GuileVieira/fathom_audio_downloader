@@ -73,6 +73,33 @@ class FathomBatchProcessor:
         """Remove caracteres inválidos do nome do arquivo"""
         return re.sub(r'[<>:"/\\|?*]', '_', filename).strip()
     
+    def _get_video_dir(self, title: str) -> Path:
+        """Retorna o diretório específico do vídeo"""
+        video_dir = Path(DOWNLOADS_DIR) / title
+        video_dir.mkdir(exist_ok=True)
+        return video_dir
+    
+    def _get_video_paths(self, title: str) -> Dict[str, Path]:
+        """Retorna todos os caminhos de arquivos para um vídeo específico"""
+        video_dir = self._get_video_dir(title)
+        
+        return {
+            # Arquivo principal (fica na raiz)
+            'unified': Path(DOWNLOADS_DIR) / f"{title}_unified.json",
+            
+            # Arquivos organizados na pasta do vídeo
+            'video_dir': video_dir,
+            'mp3': video_dir / f"{title}_1.75x.mp3",
+            'transcript': video_dir / f"{title}_transcript.txt",
+            'speakers_json': video_dir / f"{title}_speakers.json",
+            'speakers_txt': video_dir / f"{title}_speakers.txt",
+            'transcript_details': video_dir / f"{title}_transcript_details.json",
+            'metadata': video_dir / f"{title}_metadata.json",
+            'summary': video_dir / f"{title}_summary.txt",
+            'fathom_transcript_json': video_dir / f"{title}_fathom_transcript.json",
+            'fathom_transcript_txt': video_dir / f"{title}_fathom_transcript.txt"
+        }
+    
     async def process_video(self, video_data: Dict):
         """Processa um vídeo individual"""
         video_id = video_data['id']
@@ -198,8 +225,9 @@ class FathomBatchProcessor:
     async def _download_and_convert_audio(self, m3u8_url: str, title: str) -> Path:
         """Baixa e converte o áudio do stream m3u8 para MP3 acelerado em 1.75x"""
         os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-        # Usa caminho absoluto para garantir que o ffmpeg encontre o diretório
-        mp3_path = Path(DOWNLOADS_DIR).resolve() / f"{title}_1.75x.mp3"
+        # Usar nova estrutura de pastas
+        paths = self._get_video_paths(title)
+        mp3_path = paths['mp3'].resolve()
 
         if mp3_path.exists():
             print(f"🎵 {title} - MP3 já existe, pulando download/conversão")
@@ -266,9 +294,10 @@ class FathomBatchProcessor:
     
     async def _transcribe_with_speaker_labels(self, mp3_path: Path, title: str) -> Optional[str]:
         """Transcreve áudio usando AssemblyAI com speaker_labels para áudios mono"""
-        transcript_path = Path(DOWNLOADS_DIR) / f"{title}_transcript.txt"
-        speakers_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.json"
-        json_response_path = Path(DOWNLOADS_DIR) / f"{title}_transcript_details.json"
+        paths = self._get_video_paths(title)
+        transcript_path = paths['transcript']
+        speakers_path = paths['speakers_json']
+        json_response_path = paths['transcript_details']
 
         if transcript_path.exists():
             print(f"📝 {title} - Transcrição já existe")
@@ -328,8 +357,9 @@ class FathomBatchProcessor:
     
     async def _process_speakers(self, transcript, title: str):
         """Processa e salva informações de speakers separadamente"""
-        speakers_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.json"
-        speakers_txt_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.txt"
+        paths = self._get_video_paths(title)
+        speakers_path = paths['speakers_json']
+        speakers_txt_path = paths['speakers_txt']
         
         speakers_data = {
             'speaker_labels': True,
@@ -643,8 +673,9 @@ class FathomBatchProcessor:
             if not metadata:
                 return
             
-            # Salvar metadados
-            metadata_path = Path(DOWNLOADS_DIR) / f"{title}_metadata.json"
+            # Usar nova estrutura de pastas
+            paths = self._get_video_paths(title)
+            metadata_path = paths['metadata']
             
             with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
@@ -652,7 +683,7 @@ class FathomBatchProcessor:
             print(f"   📋 Metadados salvos: {metadata_path.name}")
             
             # Criar resumo em texto
-            summary_path = Path(DOWNLOADS_DIR) / f"{title}_summary.txt"
+            summary_path = paths['summary']
             
             with open(summary_path, 'w', encoding='utf-8') as f:
                 f.write("🎥 RESUMO DA CALL\n")
@@ -761,9 +792,10 @@ class FathomBatchProcessor:
     def create_unified_output(self, title: str) -> Optional[Dict[str, Any]]:
         """Cria estrutura unificada combinando metadados do Fathom com transcrição do AssemblyAI"""
         try:
-            # Carregar arquivos
-            metadata_path = Path(DOWNLOADS_DIR) / f"{title}_metadata.json"
-            speakers_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.json"
+            # Carregar arquivos usando nova estrutura
+            paths = self._get_video_paths(title)
+            metadata_path = paths['metadata']
+            speakers_path = paths['speakers_json']
             html_path = Path("html_pages") / f"{title}.html"
             
             if not all([metadata_path.exists(), speakers_path.exists(), html_path.exists()]):
@@ -901,8 +933,9 @@ class FathomBatchProcessor:
             if not unified_data:
                 return
             
-            # Salvar estrutura unificada
-            unified_path = Path(DOWNLOADS_DIR) / f"{title}_unified.json"
+            # Usar nova estrutura de pastas
+            paths = self._get_video_paths(title)
+            unified_path = paths['unified']  # Fica na raiz
             with open(unified_path, 'w', encoding='utf-8') as f:
                 json.dump(unified_data, f, indent=2, ensure_ascii=False)
             
@@ -914,7 +947,7 @@ class FathomBatchProcessor:
             
             if fathom_transcript:
                 # Salvar transcrição do Fathom em JSON
-                fathom_transcript_path = Path(DOWNLOADS_DIR) / f"{title}_fathom_transcript.json"
+                fathom_transcript_path = paths['fathom_transcript_json']
                 with open(fathom_transcript_path, 'w', encoding='utf-8') as f:
                     json.dump({
                         'source': 'fathom_html',
@@ -923,7 +956,7 @@ class FathomBatchProcessor:
                     }, f, indent=2, ensure_ascii=False)
                 
                 # Salvar transcrição do Fathom em texto formatado
-                fathom_text_path = Path(DOWNLOADS_DIR) / f"{title}_fathom_transcript.txt"
+                fathom_text_path = paths['fathom_transcript_txt']
                 with open(fathom_text_path, 'w', encoding='utf-8') as f:
                     f.write("📝 TRANSCRIÇÃO ORIGINAL DO FATHOM\n")
                     f.write("=" * 50 + "\n\n")
@@ -942,12 +975,73 @@ class FathomBatchProcessor:
         except Exception as e:
             print(f"   ❌ Erro ao salvar estrutura unificada: {str(e)}")
 
+    def migrate_existing_files(self) -> None:
+        """Migra arquivos existentes para a nova estrutura de pastas"""
+        print("🔄 Verificando se há arquivos para migrar...")
+        
+        downloads_dir = Path(DOWNLOADS_DIR)
+        migrated_count = 0
+        
+        # Buscar todos os arquivos _unified.json na raiz (estes já estão no lugar certo)
+        unified_files = list(downloads_dir.glob("*_unified.json"))
+        
+        for unified_file in unified_files:
+            # Extrair o título do arquivo unified
+            title = unified_file.stem.replace("_unified", "")
+            
+            # Verificar se há arquivos antigos para migrar
+            old_files_patterns = [
+                f"{title}_*.mp3",
+                f"{title}_transcript.txt", 
+                f"{title}_speakers.json",
+                f"{title}_speakers.txt",
+                f"{title}_transcript_details.json",
+                f"{title}_metadata.json",
+                f"{title}_summary.txt",
+                f"{title}_fathom_transcript.json",
+                f"{title}_fathom_transcript.txt"
+            ]
+            
+            files_to_migrate = []
+            for pattern in old_files_patterns:
+                files_to_migrate.extend(downloads_dir.glob(pattern))
+            
+            if files_to_migrate:
+                print(f"📁 Migrando arquivos para: {title}/")
+                
+                # Criar estrutura de pastas
+                paths = self._get_video_paths(title)
+                
+                # Migrar cada arquivo
+                for old_file in files_to_migrate:
+                    if old_file.name.endswith("_unified.json"):
+                        continue  # Unified fica na raiz
+                    
+                    new_path = paths['video_dir'] / old_file.name
+                    
+                    try:
+                        # Mover arquivo para nova pasta
+                        old_file.rename(new_path)
+                        print(f"   ✅ {old_file.name} → {title}/{old_file.name}")
+                        migrated_count += 1
+                    except Exception as e:
+                        print(f"   ❌ Erro ao migrar {old_file.name}: {str(e)}")
+        
+        if migrated_count > 0:
+            print(f"🎉 Migração concluída! {migrated_count} arquivos reorganizados.")
+        else:
+            print("✅ Nenhum arquivo precisava ser migrado.")
+
 async def main():
     # Carregar variáveis de ambiente
     from dotenv import load_dotenv
     load_dotenv()
     
     processor = FathomBatchProcessor()
+    
+    # Migrar arquivos existentes para nova estrutura
+    processor.migrate_existing_files()
+    
     await processor.run()
 
 if __name__ == '__main__':
