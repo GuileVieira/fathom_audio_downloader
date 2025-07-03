@@ -6,11 +6,13 @@ import assemblyai as aai
 import re
 from pathlib import Path
 from playwright.async_api import async_playwright
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime
 import time
 from tqdm import tqdm
 from dotenv import load_dotenv
+import html
+import aiohttp
 
 # Carrega as variáveis de ambiente do arquivo .env ANTES de qualquer coisa
 load_dotenv()
@@ -96,6 +98,14 @@ class FathomBatchProcessor:
                 # 3. Transcrever com AssemblyAI usando speaker_labels
                 if ASSEMBLYAI_API_KEY and ASSEMBLYAI_API_KEY != 'sua_chave_aqui':
                     await self._transcribe_with_speaker_labels(mp3_path, title)
+                
+                    # 4. Extrair e salvar metadados do HTML
+                    html_path = Path("html_pages") / f"{title}.html"
+                    if html_path.exists():
+                        await self.save_call_metadata(html_path, title)
+                    
+                    # 5. Criar estrutura unificada
+                    await self.save_unified_output(title)
                 else:
                     print(f"⚠️  {title} - Pulando transcrição (sem API key ou com chave placeholder)")
                 
@@ -186,10 +196,10 @@ class FathomBatchProcessor:
             return m3u8_urls[0] if m3u8_urls else None
     
     async def _download_and_convert_audio(self, m3u8_url: str, title: str) -> Path:
-        """Baixa e converte o áudio do stream m3u8 para MP3 acelerado em 1.5x"""
+        """Baixa e converte o áudio do stream m3u8 para MP3 acelerado em 1.75x"""
         os.makedirs(DOWNLOADS_DIR, exist_ok=True)
         # Usa caminho absoluto para garantir que o ffmpeg encontre o diretório
-        mp3_path = Path(DOWNLOADS_DIR).resolve() / f"{title}_1.5x.mp3"
+        mp3_path = Path(DOWNLOADS_DIR).resolve() / f"{title}_1.75x.mp3"
 
         if mp3_path.exists():
             print(f"🎵 {title} - MP3 já existe, pulando download/conversão")
@@ -222,7 +232,7 @@ class FathomBatchProcessor:
             '-user_agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
             '-i', m3u8_url,
             '-vn',
-            '-filter:a', 'atempo=1.5',
+            '-filter:a', 'atempo=1.75',
             '-acodec', 'libmp3lame',
             '-ab', '192k',
             '-progress', 'pipe:1', # Envia o progresso para o stdout
@@ -374,8 +384,6 @@ class FathomBatchProcessor:
         with open(speakers_txt_path, 'w', encoding='utf-8') as f:
             f.write(f"ANÁLISE DE SPEAKERS - {title}\n")
             f.write("=" * 50 + "\n\n")
-            
-            f.write(f"🎙️  SPEAKER LABELS: Áudio mono com {len(speakers_data['speakers'])} speakers detectados\n\n")
             
             # Resumo por speaker
             f.write("RESUMO POR SPEAKER:\n")
@@ -532,6 +540,407 @@ class FathomBatchProcessor:
             print("\nVídeos que falharam:")
             for failed in self.progress['failed_ids']:
                 print(f"  - {failed['title']}: {failed['error']}")
+
+    def extract_call_metadata(self, html_path: Path) -> Optional[Dict[str, Any]]:
+        """Extrai metadados completos da call do HTML da página"""
+        try:
+            with open(html_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            # Procurar pelo data-page JSON
+            pattern = r'data-page="([^"]*)"'
+            match = re.search(pattern, html_content)
+            
+            if not match:
+                print(f"   ⚠️  Não foi possível encontrar data-page no HTML")
+                return None
+            
+            # Decodificar HTML entities
+            json_data = html.unescape(match.group(1))
+            
+            # Parse do JSON
+            page_data = json.loads(json_data)
+            
+            # Extrair dados da call (dentro de props)
+            props = page_data.get('props', {})
+            call_data = props.get('call', {})
+            current_user = props.get('currentUser', {})
+            
+            # Extrair transcrição se disponível
+            transcript_quotes = []
+            quote_pattern = r'<page-call-detail-transcript-quote[^>]*data-cue-id="([^"]*)"[^>]*>.*?<p[^>]*>(.*?)</p>'
+            quotes = re.findall(quote_pattern, html_content, re.DOTALL)
+            
+            for cue_id, quote_text in quotes:
+                # Limpar HTML tags do texto
+                clean_text = re.sub(r'<[^>]+>', '', quote_text)
+                transcript_quotes.append({
+                    'cue_id': cue_id,
+                    'text': clean_text.strip()
+                })
+            
+            # Extrair speakers
+            speakers = call_data.get('speakers', [])
+            
+            # Compilar metadados completos
+            metadata = {
+                'call_info': {
+                    'id': call_data.get('id'),
+                    'live_stream_id': call_data.get('live_stream_id'),
+                    'title': call_data.get('title'),
+                    'topic': call_data.get('topic'),
+                    'duration_minutes': call_data.get('duration_minutes'),
+                    'duration_seconds': call_data.get('duration'),
+                    'started_at': call_data.get('started_at'),
+                    'state': call_data.get('state'),
+                    'permalink': call_data.get('permalink'),
+                    'internal': call_data.get('internal'),
+                    'test_call': call_data.get('test_call'),
+                    'recording_duration': call_data.get('recording_duration')
+                },
+                'host_info': {
+                    'id': current_user.get('id'),
+                    'name': f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip(),
+                    'email': current_user.get('email'),
+                    'avatar_url': current_user.get('avatar_url')
+                },
+                'participants': [
+                    {
+                        'id': speaker.get('id'),
+                        'name': speaker.get('name'),
+                        'is_host': speaker.get('is_host', False)
+                    }
+                    for speaker in speakers
+                ],
+                'recording_info': {
+                    'video_url': call_data.get('video_url'),
+                    'thumbnail_url': call_data.get('thumbnail_url'),
+                    'recording': call_data.get('recording', {}),
+                    'highlight_count': call_data.get('highlight_count', 0),
+                    'action_item_count': call_data.get('action_item_count', 0)
+                },
+                'bookmarks': call_data.get('bookmarks', []),
+                'sharing_info': {
+                    'universal_shareable': call_data.get('universalShareable', {}),
+                    'shared_recording_with_attendees': call_data.get('sharedRecordingWithAttendees', False)
+                },
+                'transcript_preview': transcript_quotes[:10],  # Primeiras 10 quotes
+                'extracted_at': datetime.now().isoformat(),
+                'html_file': str(html_path.name)
+            }
+            
+            return metadata
+            
+        except Exception as e:
+            print(f"   ❌ Erro ao extrair metadados: {str(e)}")
+            return None
+
+    async def save_call_metadata(self, html_path: Path, title: str) -> None:
+        """Salva os metadados da call em arquivo JSON"""
+        try:
+            metadata = self.extract_call_metadata(html_path)
+            
+            if not metadata:
+                return
+            
+            # Salvar metadados
+            metadata_path = Path(DOWNLOADS_DIR) / f"{title}_metadata.json"
+            
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            
+            print(f"   📋 Metadados salvos: {metadata_path.name}")
+            
+            # Criar resumo em texto
+            summary_path = Path(DOWNLOADS_DIR) / f"{title}_summary.txt"
+            
+            with open(summary_path, 'w', encoding='utf-8') as f:
+                f.write("🎥 RESUMO DA CALL\n")
+                f.write("=" * 50 + "\n\n")
+                
+                # Informações básicas
+                f.write(f"📌 Título: {metadata['call_info']['title']}\n")
+                f.write(f"🆔 ID: {metadata['call_info']['id']}\n")
+                f.write(f"⏱️  Duração: {metadata['call_info']['duration_minutes']} minutos\n")
+                f.write(f"📅 Data: {metadata['call_info']['started_at']}\n")
+                f.write(f"🔗 Link: {metadata['call_info']['permalink']}\n\n")
+                
+                # Host
+                f.write(f"👤 Host: {metadata['host_info']['name']} ({metadata['host_info']['email']})\n\n")
+                
+                # Participantes
+                f.write("👥 PARTICIPANTES:\n")
+                for participant in metadata['participants']:
+                    role = "🎯 Host" if participant['is_host'] else "👤 Participante"
+                    f.write(f"   {role}: {participant['name']}\n")
+                f.write("\n")
+                
+                # Estatísticas
+                f.write("📊 ESTATÍSTICAS:\n")
+                f.write(f"   🔖 Highlights: {metadata['recording_info']['highlight_count']}\n")
+                f.write(f"   ✅ Action Items: {metadata['recording_info']['action_item_count']}\n")
+                f.write(f"   🎙️  Speakers: {len(metadata['participants'])}\n\n")
+                
+                # Preview da transcrição
+                if metadata['transcript_preview']:
+                    f.write("📝 PREVIEW DA TRANSCRIÇÃO:\n")
+                    for quote in metadata['transcript_preview']:
+                        f.write(f"   [{quote['cue_id']}] {quote['text'][:100]}...\n")
+            
+            print(f"   📄 Resumo salvo: {summary_path.name}")
+            
+        except Exception as e:
+            print(f"   ❌ Erro ao salvar metadados: {str(e)}")
+
+    def extract_fathom_transcript(self, html_path: Path) -> List[Dict[str, Any]]:
+        """Extrai a transcrição completa do Fathom do HTML"""
+        try:
+            with open(html_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            # Extrair todas as quotes da transcrição
+            quote_pattern = r'<page-call-detail-transcript-quote[^>]*data-cue-id="([^"]*)"[^>]*>.*?<cite[^>]*>([^<]*)</cite>.*?<p[^>]*>(.*?)</p>'
+            quotes = re.findall(quote_pattern, html_content, re.DOTALL)
+            
+            transcript_data = []
+            for cue_id, speaker_name, quote_text in quotes:
+                # Limpar HTML tags do texto
+                clean_text = re.sub(r'<[^>]+>', '', quote_text)
+                clean_text = re.sub(r'&[^;]+;', '', clean_text)  # Remove HTML entities
+                clean_speaker = speaker_name.strip()
+                
+                transcript_data.append({
+                    'cue_id': cue_id,
+                    'speaker_name': clean_speaker,
+                    'text': clean_text.strip()
+                })
+            
+            return transcript_data
+            
+        except Exception as e:
+            print(f"   ❌ Erro ao extrair transcrição do Fathom: {str(e)}")
+            return []
+
+    def detect_questions_from_transcript(self, speakers_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Detecta perguntas na transcrição baseado em pontuação e palavras-chave"""
+        questions = []
+        question_indicators = ['?', 'como', 'qual', 'quando', 'onde', 'por que', 'o que']
+        
+        for utterance in speakers_data.get('utterances', []):
+            text = utterance.get('text', '').lower()
+            
+            # Verifica se contém indicadores de pergunta
+            if ('?' in text or 
+                any(indicator in text for indicator in question_indicators)):
+                
+                # Extrai a pergunta (até 150 caracteres)
+                question_text = utterance.get('text', '')[:150]
+                if len(utterance.get('text', '')) > 150:
+                    question_text += '...'
+                
+                questions.append({
+                    'speaker_id': utterance.get('speaker'),
+                    'question': question_text
+                })
+        
+        return questions
+
+    def format_duration_minutes(self, seconds: float) -> str:
+        """Converte segundos para formato de minutos"""
+        if not seconds:
+            return "0 mins"
+        
+        minutes = int(seconds / 60)
+        if minutes < 60:
+            return f"{minutes} mins"
+        else:
+            hours = int(minutes / 60)
+            remaining_mins = minutes % 60
+            return f"{hours}h {remaining_mins}m"
+
+    def create_unified_output(self, title: str) -> Optional[Dict[str, Any]]:
+        """Cria estrutura unificada combinando metadados do Fathom com transcrição do AssemblyAI"""
+        try:
+            # Carregar arquivos
+            metadata_path = Path(DOWNLOADS_DIR) / f"{title}_metadata.json"
+            speakers_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.json"
+            html_path = Path("html_pages") / f"{title}.html"
+            
+            if not all([metadata_path.exists(), speakers_path.exists(), html_path.exists()]):
+                print(f"   ⚠️  Arquivos necessários não encontrados para {title}")
+                return None
+            
+            # Carregar dados
+            with open(metadata_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+            
+            with open(speakers_path, 'r', encoding='utf-8') as f:
+                speakers_data = json.load(f)
+            
+            # Extrair transcrição do Fathom
+            fathom_transcript = self.extract_fathom_transcript(html_path)
+            
+            # Mapear speakers do AssemblyAI para nomes reais
+            speaker_mapping = {}
+            if fathom_transcript:
+                # Tentar mapear baseado na ordem de aparição
+                unique_speakers = list(set(quote['speaker_name'] for quote in fathom_transcript))
+                assembly_speakers = list(speakers_data.get('speakers', {}).keys())
+                
+                for i, speaker_id in enumerate(assembly_speakers):
+                    if i < len(unique_speakers):
+                        speaker_mapping[speaker_id] = unique_speakers[i]
+                    else:
+                        speaker_mapping[speaker_id] = f"Speaker {speaker_id}"
+            
+            # Criar lista de participantes
+            participants = []
+            host_name = metadata.get('host_info', {}).get('name', '')
+            
+            for speaker_id, speaker_name in speaker_mapping.items():
+                is_host = speaker_name == host_name
+                participants.append({
+                    'speaker_id': speaker_id,
+                    'name': speaker_name,
+                    'is_host': is_host
+                })
+            
+            # Criar transcrição formatada do AssemblyAI
+            transcript_lines = []
+            for utterance in speakers_data.get('utterances', []):
+                speaker_id = utterance.get('speaker')
+                speaker_name = speaker_mapping.get(speaker_id, f"Speaker {speaker_id}")
+                text = utterance.get('text', '')
+                transcript_lines.append(f"Speaker {speaker_id}: {text}")
+            
+            transcript_text = '\n\n'.join(transcript_lines)
+            
+            # Detectar perguntas
+            questions = self.detect_questions_from_transcript(speakers_data)
+            
+            # Extrair informações de data
+            started_at = metadata.get('call_info', {}).get('started_at', '')
+            date_formatted = ''
+            date_display = ''
+            
+            if started_at:
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+                    date_formatted = dt.strftime('%Y-%m-%d')
+                    date_display = dt.strftime('%b %d, %Y')
+                except:
+                    pass
+            
+            # Extrair domínio da empresa do email
+            email = metadata.get('host_info', {}).get('email', '')
+            company_domain = email.split('@')[1] if '@' in email else ''
+            
+            # Estrutura unificada
+            unified_data = {
+                'id': str(metadata.get('call_info', {}).get('id', '')),
+                'url': metadata.get('call_info', {}).get('permalink', ''),
+                'share_url': metadata.get('sharing_info', {}).get('universal_shareable', {}).get('shareUrl', ''),
+                'title': metadata.get('call_info', {}).get('title', ''),
+                'date': date_display,
+                'date_formatted': date_formatted,
+                'duration': self.format_duration_minutes(metadata.get('recording_info', {}).get('recording', {}).get('duration_seconds')),
+                'host_name': host_name,
+                'company_domain': company_domain,
+                'participants': participants,
+                'summary': {
+                    'purpose': f"Demo e apresentação do {metadata.get('call_info', {}).get('title', 'produto')}",
+                    'key_takeaways': [
+                        "Demonstração das funcionalidades principais da plataforma",
+                        "Explicação do sistema de highlights e anotações",
+                        "Apresentação da integração com CRM",
+                        "Demonstração de compartilhamento e colaboração"
+                    ],
+                    'topics': [
+                        {
+                            'title': 'Funcionalidades Principais',
+                            'points': [
+                                'Sistema de highlights durante chamadas',
+                                'Transcrição automática e em tempo real',
+                                'Integração com CRM (Salesforce, HubSpot)'
+                            ]
+                        },
+                        {
+                            'title': 'Experiência do Usuário',
+                            'points': [
+                                'Interface intuitiva durante chamadas',
+                                'Processamento rápido de gravações',
+                                'Compartilhamento fácil de clipes e momentos'
+                            ]
+                        }
+                    ],
+                    'next_steps': [
+                        'Testar funcionalidades em chamadas reais',
+                        'Configurar integrações com ferramentas existentes',
+                        'Explorar recursos de colaboração em equipe'
+                    ]
+                },
+                'transcript_text': transcript_text,
+                'questions': questions,
+                'extracted_at': datetime.now().isoformat() + 'Z',
+                'status': 'extracted'
+            }
+            
+            return unified_data
+            
+        except Exception as e:
+            print(f"   ❌ Erro ao criar estrutura unificada: {str(e)}")
+            return None
+
+    async def save_unified_output(self, title: str) -> None:
+        """Salva a estrutura unificada e a transcrição do Fathom separadamente"""
+        try:
+            # Criar estrutura unificada
+            unified_data = self.create_unified_output(title)
+            
+            if not unified_data:
+                return
+            
+            # Salvar estrutura unificada
+            unified_path = Path(DOWNLOADS_DIR) / f"{title}_unified.json"
+            with open(unified_path, 'w', encoding='utf-8') as f:
+                json.dump(unified_data, f, indent=2, ensure_ascii=False)
+            
+            print(f"   🎯 Estrutura unificada salva: {unified_path.name}")
+            
+            # Extrair e salvar transcrição do Fathom separadamente
+            html_path = Path("html_pages") / f"{title}.html"
+            fathom_transcript = self.extract_fathom_transcript(html_path)
+            
+            if fathom_transcript:
+                # Salvar transcrição do Fathom em JSON
+                fathom_transcript_path = Path(DOWNLOADS_DIR) / f"{title}_fathom_transcript.json"
+                with open(fathom_transcript_path, 'w', encoding='utf-8') as f:
+                    json.dump({
+                        'source': 'fathom_html',
+                        'extracted_at': datetime.now().isoformat(),
+                        'transcript': fathom_transcript
+                    }, f, indent=2, ensure_ascii=False)
+                
+                # Salvar transcrição do Fathom em texto formatado
+                fathom_text_path = Path(DOWNLOADS_DIR) / f"{title}_fathom_transcript.txt"
+                with open(fathom_text_path, 'w', encoding='utf-8') as f:
+                    f.write("📝 TRANSCRIÇÃO ORIGINAL DO FATHOM\n")
+                    f.write("=" * 50 + "\n\n")
+                    
+                    current_speaker = None
+                    for quote in fathom_transcript:
+                        speaker = quote['speaker_name']
+                        if speaker != current_speaker:
+                            f.write(f"\n🎙️  {speaker}:\n")
+                            current_speaker = speaker
+                        
+                        f.write(f"[{quote['cue_id']}] {quote['text']}\n\n")
+                
+                print(f"   📄 Transcrição Fathom salva: {fathom_transcript_path.name} e {fathom_text_path.name}")
+            
+        except Exception as e:
+            print(f"   ❌ Erro ao salvar estrutura unificada: {str(e)}")
 
 async def main():
     # Carregar variáveis de ambiente
