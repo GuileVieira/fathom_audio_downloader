@@ -12,6 +12,9 @@ processing_progress.json
 # Ignora o arquivo de ambiente com chaves de API
 .env
 
+# Ignora arquivos temporários de teste
+/tmp/*
+
 # Ignora arquivos de sistema do Python
 __pycache__/
 *.pyc
