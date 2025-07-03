@@ -97,7 +97,8 @@ class FathomBatchProcessor:
             'metadata': video_dir / f"{title}_metadata.json",
             'summary': video_dir / f"{title}_summary.txt",
             'fathom_transcript_json': video_dir / f"{title}_fathom_transcript.json",
-            'fathom_transcript_txt': video_dir / f"{title}_fathom_transcript.txt"
+            'fathom_transcript_txt': video_dir / f"{title}_fathom_transcript.txt",
+            'html': video_dir / f"{title}.html"
         }
     
     async def process_video(self, video_data: Dict):
@@ -127,9 +128,9 @@ class FathomBatchProcessor:
                     await self._transcribe_with_speaker_labels(mp3_path, title)
                 
                     # 4. Extrair e salvar metadados do HTML
-                    html_path = Path("html_pages") / f"{title}.html"
-                    if html_path.exists():
-                        await self.save_call_metadata(html_path, title)
+                    paths = self._get_video_paths(title)
+                    if paths['html'].exists():
+                        await self.save_call_metadata(title)
                     
                     # 5. Criar estrutura unificada
                     await self.save_unified_output(title)
@@ -198,18 +199,21 @@ class FathomBatchProcessor:
             await page.goto(video_url)
             await asyncio.sleep(10)
             
-            # Salvar HTML da página
+            # Salvar HTML da página usando nova estrutura
             try:
                 html_content = await page.content()
-                html_dir = Path("html_pages")
-                html_dir.mkdir(exist_ok=True)
                 
                 # Usar o título sanitizado ou ID do vídeo para o HTML
                 if title:
                     filename = self._sanitize_filename(title)
+                    paths = self._get_video_paths(filename)
+                    html_path = paths['html']
                 else:
+                    # Fallback para HTML sem título
+                    html_dir = Path("html_pages")
+                    html_dir.mkdir(exist_ok=True)
                     filename = video_url.split('/')[-1]
-                html_path = html_dir / f"{filename}.html"
+                    html_path = html_dir / f"{filename}.html"
                 
                 with open(html_path, 'w', encoding='utf-8') as f:
                     f.write(html_content)
@@ -473,7 +477,9 @@ class FathomBatchProcessor:
         title = self._sanitize_filename(video_data['title'])
         url = video_data['url']
         
-        html_path = Path(HTML_DIR) / f"{title}.html"
+        # Usar nova estrutura de pastas
+        paths = self._get_video_paths(title)
+        html_path = paths['html']
         
         # Pula se já foi baixado
         if html_path.exists():
@@ -665,17 +671,18 @@ class FathomBatchProcessor:
             print(f"   ❌ Erro ao extrair metadados: {str(e)}")
             return None
 
-    async def save_call_metadata(self, html_path: Path, title: str) -> None:
+    async def save_call_metadata(self, title: str) -> None:
         """Salva os metadados da call em arquivo JSON"""
         try:
+            # Usar nova estrutura de pastas
+            paths = self._get_video_paths(title)
+            html_path = paths['html']
+            metadata_path = paths['metadata']
+            
             metadata = self.extract_call_metadata(html_path)
             
             if not metadata:
                 return
-            
-            # Usar nova estrutura de pastas
-            paths = self._get_video_paths(title)
-            metadata_path = paths['metadata']
             
             with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
@@ -796,7 +803,7 @@ class FathomBatchProcessor:
             paths = self._get_video_paths(title)
             metadata_path = paths['metadata']
             speakers_path = paths['speakers_json']
-            html_path = Path("html_pages") / f"{title}.html"
+            html_path = paths['html']
             
             if not all([metadata_path.exists(), speakers_path.exists(), html_path.exists()]):
                 print(f"   ⚠️  Arquivos necessários não encontrados para {title}")
@@ -942,7 +949,7 @@ class FathomBatchProcessor:
             print(f"   🎯 Estrutura final salva: {final_path.name}")
             
             # Extrair e salvar transcrição do Fathom separadamente
-            html_path = Path("html_pages") / f"{title}.html"
+            html_path = paths['html']
             fathom_transcript = self.extract_fathom_transcript(html_path)
             
             if fathom_transcript:
@@ -1019,6 +1026,13 @@ class FathomBatchProcessor:
             for pattern in old_files_patterns:
                 files_to_migrate.extend(downloads_dir.glob(pattern))
             
+            # Verificar se há arquivo HTML na pasta html_pages para migrar
+            html_pages_dir = Path("html_pages")
+            if html_pages_dir.exists():
+                html_file = html_pages_dir / f"{title}.html"
+                if html_file.exists():
+                    files_to_migrate.append(html_file)
+            
             if files_to_migrate:
                 print(f"📁 Migrando arquivos para: {title}/")
                 
@@ -1030,7 +1044,11 @@ class FathomBatchProcessor:
                     if old_file.name.endswith("_final.json"):
                         continue  # Final fica na raiz
                     
-                    new_path = paths['video_dir'] / old_file.name
+                    # Determinar caminho de destino
+                    if old_file.name.endswith(".html"):
+                        new_path = paths['html']
+                    else:
+                        new_path = paths['video_dir'] / old_file.name
                     
                     try:
                         # Mover arquivo para nova pasta

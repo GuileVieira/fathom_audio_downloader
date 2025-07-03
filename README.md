@@ -122,7 +122,8 @@ downloads_batch/
     ├── {título}_metadata.json
     ├── {título}_summary.txt
     ├── {título}_fathom_transcript.json
-    └── {título}_fathom_transcript.txt
+    ├── {título}_fathom_transcript.txt
+    └── {título}.html
 ```
 
 ### **Migração Automática:**
@@ -163,7 +164,7 @@ downloads_batch/
     - Mantém speakers com nomes reais (ex: "Richard White", "Susannah DuRant")
     - Inclui cue IDs originais para referência
 
-### Download de HTML (`html_pages/`):
+**Backup HTML:**
 -   `{título}.html` - HTML completo da página do Fathom (salvo automaticamente durante o processamento)
 
 ## 5. Estrutura da Saída Unificada
