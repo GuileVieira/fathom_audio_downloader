@@ -6,8 +6,11 @@ Este projeto automatiza o download, conversão e transcrição de vídeos da pla
 
 -   **Processamento Paralelo:** Processa até 4 vídeos simultaneamente.
 -   **Extração de Áudio:** Baixa e converte apenas o áudio dos vídeos para MP3, economizando tempo e espaço.
--   **Aceleração de Áudio:** Acelera automaticamente o áudio para 1.5x.
+-   **Aceleração de Áudio:** Acelera automaticamente o áudio para 1.75x (otimizado para qualidade).
 -   **Transcrição Automática:** Usa a API do AssemblyAI para transcrever os áudios com separação de speakers.
+-   **Extração de Metadados:** Extrai metadados completos das calls diretamente do HTML.
+-   **Estrutura Unificada:** Combina metadados do Fathom com transcrição do AssemblyAI em formato padronizado.
+-   **Transcrição Original:** Preserva a transcrição original do Fathom extraída do HTML.
 -   **Download de HTML:** Baixa o HTML completo das páginas do Fathom para backup/análise.
 -   **Controle de Progresso:** Salva o progresso e permite retomar o processo em caso de falha, evitando trabalho duplicado.
 
@@ -89,7 +92,7 @@ Ao final, sua pasta `cookies/` **deve conter os 3 arquivos**: `cookies.json`, `l
 
 2.  **Execute o Script:**
     
-    **Para processamento completo (áudio + transcrição):**
+    **Para processamento completo (áudio + transcrição + estrutura unificada):**
     ```bash
     python fathom_batch_processor.py
     ```
@@ -104,13 +107,104 @@ Ao final, sua pasta `cookies/` **deve conter os 3 arquivos**: `cookies.json`, `l
 ## 4. Arquivos Gerados
 
 ### Processamento de Áudio e Transcrição (`downloads_batch/`):
--   `{título}_1.5x.mp3` - Áudio acelerado em 1.5x
--   `{título}_transcript.txt` - Transcrição completa
--   `{título}_speakers.json` - Dados estruturados de speakers
--   `{título}_speakers.txt` - Análise de speakers formatada
+
+#### Arquivos de Áudio:
+-   `{título}_1.75x.mp3` - Áudio acelerado em 1.75x (otimizado para qualidade)
+
+#### Transcrição AssemblyAI:
+-   `{título}_transcript.txt` - Transcrição completa em português
+-   `{título}_speakers.json` - Dados estruturados de speakers com timestamps
+-   `{título}_speakers.txt` - Análise de speakers formatada para leitura
 -   `{título}_transcript_details.json` - Log de diagnóstico da API
 
+#### Metadados e Estruturas:
+-   `{título}_metadata.json` - Metadados completos extraídos do HTML
+-   `{título}_summary.txt` - Resumo formatado da call
+
+#### 🆕 **Estrutura Unificada (Nova Funcionalidade):**
+-   `{título}_unified.json` - **Estrutura padronizada** que combina:
+    - Metadados do Fathom (ID, URL, título, data, duração, host, participantes)
+    - Transcrição processada do AssemblyAI em português
+    - Mapeamento automático de speakers (IDs → nomes reais)
+    - Detecção automática de perguntas na conversa
+    - Summary estruturado com purpose, key_takeaways, topics, next_steps
+    - Formato pronto para análise de dados e integração com outras ferramentas
+
+#### 🆕 **Transcrição Original do Fathom:**
+-   `{título}_fathom_transcript.json` - Transcrição original extraída do HTML
+-   `{título}_fathom_transcript.txt` - Transcrição original formatada
+    - Preserva o texto original em inglês do Fathom
+    - Mantém speakers com nomes reais (ex: "Richard White", "Susannah DuRant")
+    - Inclui cue IDs originais para referência
+
 ### Download de HTML (`html_pages/`):
--   `{título}.html` - HTML completo da página do Fathom
+-   `{título}.html` - HTML completo da página do Fathom (salvo automaticamente durante o processamento)
+
+## 5. Estrutura da Saída Unificada
+
+A nova funcionalidade gera um arquivo `_unified.json` com a seguinte estrutura padronizada:
+
+```json
+{
+  "id": "342446955",
+  "url": "https://fathom.video/calls/342446955",
+  "share_url": "https://fathom.video/share/...",
+  "title": "Fathom Demo",
+  "date": "Sep 16, 2021",
+  "date_formatted": "2021-09-16",
+  "duration": "8 mins",
+  "host_name": "Guilherme Vieira",
+  "company_domain": "gmail.com",
+  "participants": [
+    {
+      "speaker_id": "A",
+      "name": "Richard White",
+      "is_host": false
+    },
+    {
+      "speaker_id": "B", 
+      "name": "Susannah DuRant",
+      "is_host": false
+    }
+  ],
+  "summary": {
+    "purpose": "Demo e apresentação do produto",
+    "key_takeaways": [...],
+    "topics": [...],
+    "next_steps": [...]
+  },
+  "transcript_text": "Speaker A: Texto da transcrição...",
+  "questions": [
+    {
+      "speaker_id": "A",
+      "question": "Como funciona o sistema de highlights?"
+    }
+  ],
+  "extracted_at": "2025-07-03T18:25:09.205018Z",
+  "status": "extracted"
+}
+```
+
+## 6. Benefícios da Nova Versão
+
+### 🎯 **Dados Estruturados:**
+- **Formato padronizado** para análise de dados
+- **Mapeamento automático** de speakers (IDs do AssemblyAI → nomes reais do Fathom)
+- **Detecção inteligente** de perguntas na conversa
+- **Metadados completos** extraídos automaticamente
+
+### 📊 **Duas Fontes de Transcrição:**
+- **AssemblyAI**: Processada, traduzida para português, com speaker labels
+- **Fathom Original**: Preservada em inglês com nomes reais e cue IDs
+
+### 🚀 **Pronto para Análise:**
+- Estrutura JSON compatível com ferramentas de análise
+- Summary automático com insights estruturados
+- Timestamps e confiança para cada utterance
+- Formato ideal para integração com dashboards e relatórios
+
+---
+
+## 7. Solução de Problemas
 
 O progresso fica salvo em `processing_progress.json`. Para reprocessar um vídeo, basta removê-lo da lista de `processed_ids` neste arquivo. 
