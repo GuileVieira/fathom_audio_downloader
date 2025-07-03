@@ -4,7 +4,7 @@ Este projeto automatiza o download, conversão e transcrição de vídeos da pla
 
 ## Funcionalidades
 
--   **Processamento Paralelo:** Processa até 4 vídeos simultaneamente.
+-   **Processamento Paralelo:** Processa até 8 vídeos simultaneamente.
 -   **Extração de Áudio:** Baixa e converte apenas o áudio dos vídeos para MP3, economizando tempo e espaço.
 -   **Aceleração de Áudio:** Acelera automaticamente o áudio para 1.75x (otimizado para qualidade).
 -   **Transcrição Automática:** Usa a API do AssemblyAI para transcrever os áudios com separação de speakers.
@@ -142,7 +142,7 @@ python fathom_batch_processor.py clean
 
 ### 🆕 **Nova Estrutura Organizada por Vídeo:**
 
-O sistema agora organiza automaticamente os arquivos em pastas individuais para cada vídeo, mantendo apenas o arquivo principal `_unified.json` na raiz para fácil acesso:
+O sistema agora organiza automaticamente os arquivos em pastas individuais para cada vídeo, mantendo apenas o arquivo principal `_final.json` na raiz para fácil acesso:
 
 ```
 downloads_batch/
@@ -203,7 +203,7 @@ downloads_batch/
 
 ## 5. Estrutura da Saída Unificada
 
-A nova funcionalidade gera um arquivo `_unified.json` com a seguinte estrutura padronizada:
+A nova funcionalidade gera um arquivo `_final.json` com a seguinte estrutura padronizada:
 
 ```json
 {
