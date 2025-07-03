@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import subprocess
-import aiohttp
+import assemblyai as aai
 import re
 from pathlib import Path
 from playwright.async_api import async_playwright
@@ -27,6 +27,9 @@ MAX_WORKERS = 4
 # AssemblyAI configurações
 ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')
 
+# Configurar o AssemblyAI
+aai.settings.api_key = ASSEMBLYAI_API_KEY
+
 # -- DEBUG -- : Imprime a chave da API para verificação
 print(f"🔑 Chave da AssemblyAI carregada com sucesso")
 
@@ -41,6 +44,7 @@ class FathomBatchProcessor:
         self.session_storage = self._load_storage(SESSION_STORAGE_FILE)
         self.progress = self._load_progress()
         self.semaphore = asyncio.Semaphore(MAX_WORKERS)
+        self.transcriber = aai.Transcriber()
         
     def _load_cookies(self) -> List[Dict]:
         with open(COOKIES_FILE, 'r') as f:
@@ -88,9 +92,9 @@ class FathomBatchProcessor:
                 # 2. Baixar e converter áudio diretamente do m3u8
                 mp3_path = await self._download_and_convert_audio(m3u8_url, title)
                 
-                # 3. Transcrever com AssemblyAI
+                # 3. Transcrever com AssemblyAI usando Multichannel
                 if ASSEMBLYAI_API_KEY and ASSEMBLYAI_API_KEY != 'sua_chave_aqui':
-                    await self._transcribe_audio(mp3_path, title)
+                    await self._transcribe_with_multichannel(mp3_path, title)
                 else:
                     print(f"⚠️  {title} - Pulando transcrição (sem API key ou com chave placeholder)")
                 
@@ -229,66 +233,145 @@ class FathomBatchProcessor:
 
         return mp3_path
     
-    async def _transcribe_audio(self, mp3_path: Path, title: str) -> Optional[str]:
-        """Transcreve áudio usando AssemblyAI"""
+    async def _transcribe_with_multichannel(self, mp3_path: Path, title: str) -> Optional[str]:
+        """Transcreve áudio usando AssemblyAI Multichannel"""
         transcript_path = Path(DOWNLOADS_DIR) / f"{title}_transcript.txt"
-        json_response_path = Path(DOWNLOADS_DIR) / f"{title}_transcript_details.json" # Log de diagnóstico
+        speakers_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.json"
+        json_response_path = Path(DOWNLOADS_DIR) / f"{title}_transcript_details.json"
 
         if transcript_path.exists():
             print(f"📝 {title} - Transcrição já existe")
             return transcript_path.read_text(encoding='utf-8')
         
-        print(f"📝 {title} - Transcrevendo com AssemblyAI...")
+        print(f"📝 {title} - Transcrevendo com AssemblyAI Multichannel...")
         
-        headers = {"authorization": ASSEMBLYAI_API_KEY}
-        
-        # Upload do arquivo
-        async with aiohttp.ClientSession() as session:
-            with open(mp3_path, 'rb') as f:
-                async with session.post(
-                    "https://api.assemblyai.com/v2/upload",
-                    headers=headers,
-                    data=f
-                ) as response:
-                    upload_result = await response.json()
-                    audio_url = upload_result["upload_url"]
+        try:
+            # Configuração para Multichannel transcription
+            config = aai.TranscriptionConfig(
+                multichannel=True,
+                speaker_labels=True,
+                language_code="pt"
+            )
             
-            # Solicitar transcrição
-            payload = {
-                "audio_url": audio_url,
-                "language_code": "pt",
-                "speaker_labels": True
-            }
+            # Transcrever usando o SDK (método síncrono executado em thread)
+            def transcribe_sync():
+                return self.transcriber.transcribe(str(mp3_path), config)
             
-            async with session.post(
-                "https://api.assemblyai.com/v2/transcript",
-                headers=headers,
-                json=payload
-            ) as response:
-                transcript_data = await response.json()
-                transcript_id = transcript_data["id"]
+            # Executar em thread para não bloquear o loop asyncio
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                transcript = await asyncio.get_event_loop().run_in_executor(
+                    executor, transcribe_sync
+                )
             
-            # Aguardar conclusão
-            while True:
-                async with session.get(
-                    f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
-                    headers=headers
-                ) as response:
-                    result = await response.json()
-                    
-                    # Salva a resposta JSON completa para diagnóstico
-                    with open(json_response_path, 'w', encoding='utf-8') as f:
-                        json.dump(result, f, ensure_ascii=False, indent=2)
+            # Salva a resposta JSON completa para diagnóstico
+            with open(json_response_path, 'w', encoding='utf-8') as f:
+                json.dump(transcript.json_response, f, ensure_ascii=False, indent=2)
 
-                    if result["status"] == "completed":
-                        transcript_text = result["text"]
-                        transcript_path.write_text(transcript_text, encoding='utf-8')
-                        return transcript_text
-                    elif result["status"] == "error":
-                        raise Exception(f"Erro na transcrição: {result.get('error', 'Unknown error')}")
-                    
-                    print(f"    Status: {result['status']}... aguardando...")
-                    await asyncio.sleep(10)
+            if transcript.status == aai.TranscriptStatus.completed:
+                # Salvar transcrição completa
+                transcript_text = transcript.text
+                transcript_path.write_text(transcript_text, encoding='utf-8')
+                
+                # Processar e salvar informações de speakers separadamente
+                await self._process_speakers(transcript, title)
+                
+                print(f"✅ {title} - Transcrição completa!")
+                if transcript.json_response.get('audio_channels'):
+                    print(f"   📊 Canais de áudio detectados: {transcript.json_response['audio_channels']}")
+                
+                return transcript_text
+            else:
+                raise Exception(f"Erro na transcrição: {transcript.error}")
+                
+        except Exception as e:
+            print(f"❌ {title} - Erro na transcrição: {str(e)}")
+            raise e
+    
+    async def _process_speakers(self, transcript, title: str):
+        """Processa e salva informações de speakers separadamente"""
+        speakers_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.json"
+        speakers_txt_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.txt"
+        
+        speakers_data = {
+            'multichannel': transcript.json_response.get('multichannel', False),
+            'audio_channels': transcript.json_response.get('audio_channels', 0),
+            'speakers': {},
+            'utterances': []
+        }
+        
+        # Processar utterances se existirem
+        if hasattr(transcript, 'utterances') and transcript.utterances:
+            print(f"   🗣️  {title} - Processando {len(transcript.utterances)} utterances")
+            
+            for utt in transcript.utterances:
+                speaker_id = utt.speaker
+                channel = getattr(utt, 'channel', None)
+                
+                # Organizar por speaker
+                if speaker_id not in speakers_data['speakers']:
+                    speakers_data['speakers'][speaker_id] = {
+                        'channel': channel,
+                        'total_time': 0,
+                        'utterances_count': 0,
+                        'text_segments': []
+                    }
+                
+                # Calcular tempo de fala
+                duration = utt.end - utt.start
+                speakers_data['speakers'][speaker_id]['total_time'] += duration
+                speakers_data['speakers'][speaker_id]['utterances_count'] += 1
+                speakers_data['speakers'][speaker_id]['text_segments'].append({
+                    'start': utt.start,
+                    'end': utt.end,
+                    'text': utt.text,
+                    'confidence': utt.confidence
+                })
+                
+                # Adicionar à lista de utterances
+                speakers_data['utterances'].append({
+                    'speaker': speaker_id,
+                    'channel': channel,
+                    'start': utt.start,
+                    'end': utt.end,
+                    'text': utt.text,
+                    'confidence': utt.confidence
+                })
+        
+        # Salvar dados estruturados em JSON
+        with open(speakers_path, 'w', encoding='utf-8') as f:
+            json.dump(speakers_data, f, ensure_ascii=False, indent=2)
+        
+        # Criar arquivo de texto formatado para leitura fácil
+        with open(speakers_txt_path, 'w', encoding='utf-8') as f:
+            f.write(f"ANÁLISE DE SPEAKERS - {title}\n")
+            f.write("=" * 50 + "\n\n")
+            
+            if speakers_data['multichannel']:
+                f.write(f"🎙️  MULTICHANNEL: {speakers_data['audio_channels']} canais detectados\n\n")
+            
+            # Resumo por speaker
+            f.write("RESUMO POR SPEAKER:\n")
+            f.write("-" * 30 + "\n")
+            for speaker_id, data in speakers_data['speakers'].items():
+                total_minutes = data['total_time'] / 60000  # ms para minutos
+                f.write(f"Speaker {speaker_id}:\n")
+                if data['channel']:
+                    f.write(f"  Canal: {data['channel']}\n")
+                f.write(f"  Tempo total: {total_minutes:.1f} minutos\n")
+                f.write(f"  Segmentos: {data['utterances_count']}\n\n")
+            
+            # Transcrição cronológica
+            f.write("\nTRANSCRIÇÃO CRONOLÓGICA:\n")
+            f.write("-" * 30 + "\n")
+            for utt in sorted(speakers_data['utterances'], key=lambda x: x['start']):
+                start_time = utt['start'] / 1000  # ms para segundos
+                minutes = int(start_time // 60)
+                seconds = int(start_time % 60)
+                channel_info = f" (Canal {utt['channel']})" if utt['channel'] else ""
+                f.write(f"[{minutes:02d}:{seconds:02d}] Speaker {utt['speaker']}{channel_info}: {utt['text']}\n")
+        
+        print(f"   💾 {title} - Dados de speakers salvos em {speakers_path.name} e {speakers_txt_path.name}")
     
     async def run(self):
         """Executa o processamento em lote"""
