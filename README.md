@@ -101,8 +101,42 @@ Ao final, sua pasta `cookies/` **deve conter os 3 arquivos**: `cookies.json`, `l
     ```bash
     python download_html.py
     ```
+    
+    **Para limpar pastas de vídeos (manter apenas arquivos _final.json):**
+    ```bash
+    python fathom_batch_processor.py clean
+    ```
 
 3.  **Acompanhe o Progresso:** O script exibirá uma barra de progresso geral e barras individuais para cada conversão de áudio.
+
+### 🧹 **Comando Clean - Otimização de Espaço**
+
+O comando `clean` é útil para economizar espaço em disco mantendo apenas os dados essenciais:
+
+```bash
+python fathom_batch_processor.py clean
+```
+
+**O que faz:**
+- ✅ **Mantém:** Todos os arquivos `_final.json` (dados principais estruturados)
+- 🗑️ **Remove:** Todas as pastas individuais dos vídeos com arquivos auxiliares
+- 📊 **Mostra:** Estatísticas de espaço liberado e arquivos mantidos
+
+**Quando usar:**
+- Após processar todos os vídeos e confirmar que os dados estão corretos
+- Quando precisar liberar espaço mas manter os dados estruturados
+- Para backup/arquivamento com foco nos dados essenciais
+
+**Exemplo de saída:**
+```
+🧹 Iniciando limpeza das pastas de vídeos...
+   🗑️  Removida pasta: Title - Video/ (7.4 MB)
+
+🎉 Limpeza concluída!
+   📁 Pastas removidas: 1
+   💾 Espaço liberado: 7.4 MB
+   📄 Arquivos _final.json mantidos: 1
+```
 
 ## 4. Arquivos Gerados
 

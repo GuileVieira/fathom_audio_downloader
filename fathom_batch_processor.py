@@ -13,6 +13,8 @@ from tqdm import tqdm
 from dotenv import load_dotenv
 import html
 import aiohttp
+import sys
+import shutil
 
 # Carrega as variáveis de ambiente do arquivo .env ANTES de qualquer coisa
 load_dotenv()
@@ -1063,12 +1065,71 @@ class FathomBatchProcessor:
         else:
             print("✅ Nenhum arquivo precisava ser migrado.")
 
+    def clean_video_folders(self) -> None:
+        """Remove todas as pastas de vídeos, mantendo apenas os arquivos _final.json"""
+        print("🧹 Iniciando limpeza das pastas de vídeos...")
+        
+        downloads_dir = Path(DOWNLOADS_DIR)
+        if not downloads_dir.exists():
+            print("❌ Pasta downloads_batch não encontrada.")
+            return
+        
+        # Buscar todos os arquivos _final.json
+        final_files = list(downloads_dir.glob("*_final.json"))
+        
+        if not final_files:
+            print("❌ Nenhum arquivo _final.json encontrado.")
+            return
+        
+        removed_count = 0
+        total_size_freed = 0
+        
+        for final_file in final_files:
+            # Extrair o título do arquivo final
+            title = final_file.stem.replace("_final", "")
+            video_dir = downloads_dir / title
+            
+            if video_dir.exists() and video_dir.is_dir():
+                # Calcular tamanho da pasta antes de remover
+                try:
+                    folder_size = sum(f.stat().st_size for f in video_dir.rglob('*') if f.is_file())
+                    total_size_freed += folder_size
+                    
+                    # Remover pasta do vídeo
+                    shutil.rmtree(video_dir)
+                    print(f"   🗑️  Removida pasta: {title}/ ({self._format_size(folder_size)})")
+                    removed_count += 1
+                    
+                except Exception as e:
+                    print(f"   ❌ Erro ao remover {title}/: {str(e)}")
+        
+        if removed_count > 0:
+            print(f"\n🎉 Limpeza concluída!")
+            print(f"   📁 Pastas removidas: {removed_count}")
+            print(f"   💾 Espaço liberado: {self._format_size(total_size_freed)}")
+            print(f"   📄 Arquivos _final.json mantidos: {len(final_files)}")
+        else:
+            print("✅ Nenhuma pasta de vídeo foi encontrada para remover.")
+    
+    def _format_size(self, bytes_size: float) -> str:
+        """Formata tamanho em bytes para formato legível"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if bytes_size < 1024.0:
+                return f"{bytes_size:.1f} {unit}"
+            bytes_size /= 1024.0
+        return f"{bytes_size:.1f} TB"
+
 async def main():
     # Carregar variáveis de ambiente
     from dotenv import load_dotenv
     load_dotenv()
     
     processor = FathomBatchProcessor()
+    
+    # Verificar se foi passado o comando "clean"
+    if len(sys.argv) > 1 and sys.argv[1] == "clean":
+        processor.clean_video_folders()
+        return
     
     # Migrar arquivos existentes para nova estrutura
     processor.migrate_existing_files()
