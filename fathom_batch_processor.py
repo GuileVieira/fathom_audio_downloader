@@ -27,7 +27,7 @@ CALLS_FILE = 'fathom_calls.json'
 PROGRESS_FILE = 'processing_progress.json'
 DOWNLOADS_DIR = 'downloads_batch'
 HTML_DIR = 'html_pages'
-MAX_WORKERS = 4
+MAX_WORKERS = 8
 
 # AssemblyAI configurações
 ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')
@@ -1127,14 +1127,20 @@ async def main():
     processor = FathomBatchProcessor()
     
     # Verificar se foi passado o comando "clean"
-    if len(sys.argv) > 1 and sys.argv[1] == "clean":
-        processor.clean_video_folders()
-        return
+    should_clean = len(sys.argv) > 1 and sys.argv[1] == "clean"
     
     # Migrar arquivos existentes para nova estrutura
     processor.migrate_existing_files()
     
+    # Processar todos os vídeos primeiro
     await processor.run()
+    
+    # Só depois limpar as pastas se solicitado
+    if should_clean:
+        print("\n" + "=" * 50)
+        print("🧹 INICIANDO LIMPEZA DAS PASTAS...")
+        print("=" * 50)
+        processor.clean_video_folders()
 
 if __name__ == '__main__':
     asyncio.run(main()) 
