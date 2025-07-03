@@ -7,7 +7,8 @@ Este projeto automatiza o download, conversão e transcrição de vídeos da pla
 -   **Processamento Paralelo:** Processa até 4 vídeos simultaneamente.
 -   **Extração de Áudio:** Baixa e converte apenas o áudio dos vídeos para MP3, economizando tempo e espaço.
 -   **Aceleração de Áudio:** Acelera automaticamente o áudio para 1.5x.
--   **Transcrição Automática:** Usa a API do AssemblyAI para transcrever os áudios.
+-   **Transcrição Automática:** Usa a API do AssemblyAI para transcrever os áudios com separação de speakers.
+-   **Download de HTML:** Baixa o HTML completo das páginas do Fathom para backup/análise.
 -   **Controle de Progresso:** Salva o progresso e permite retomar o processo em caso de falha, evitando trabalho duplicado.
 
 ---
@@ -86,17 +87,30 @@ Ao final, sua pasta `cookies/` **deve conter os 3 arquivos**: `cookies.json`, `l
     ]
     ```
 
-2.  **Execute o Script:** Rode o processador em lote a partir do seu terminal:
+2.  **Execute o Script:**
+    
+    **Para processamento completo (áudio + transcrição):**
     ```bash
     python fathom_batch_processor.py
     ```
+    
+    **Para baixar apenas o HTML das páginas:**
+    ```bash
+    python download_html.py
+    ```
+
 3.  **Acompanhe o Progresso:** O script exibirá uma barra de progresso geral e barras individuais para cada conversão de áudio.
 
 ## 4. Arquivos Gerados
 
-Todos os arquivos processados serão salvos na pasta `downloads_batch/`, organizados pelo título do vídeo:
--   `{título}_1.5x.mp3`
--   `{título}_transcript.txt`
--   `{título}_transcript_details.json` (log de diagnóstico da API)
+### Processamento de Áudio e Transcrição (`downloads_batch/`):
+-   `{título}_1.5x.mp3` - Áudio acelerado em 1.5x
+-   `{título}_transcript.txt` - Transcrição completa
+-   `{título}_speakers.json` - Dados estruturados de speakers
+-   `{título}_speakers.txt` - Análise de speakers formatada
+-   `{título}_transcript_details.json` - Log de diagnóstico da API
+
+### Download de HTML (`html_pages/`):
+-   `{título}.html` - HTML completo da página do Fathom
 
 O progresso fica salvo em `processing_progress.json`. Para reprocessar um vídeo, basta removê-lo da lista de `processed_ids` neste arquivo. 

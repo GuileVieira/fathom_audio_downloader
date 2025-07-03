@@ -6,6 +6,10 @@
 /downloads_batch/*
 !/downloads_batch/.gitkeep
 
+# Ignora páginas HTML baixadas
+/html_pages/*
+!/html_pages/.gitkeep
+
 # Ignora o arquivo de progresso
 processing_progress.json
 

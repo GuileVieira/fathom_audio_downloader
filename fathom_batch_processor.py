@@ -22,6 +22,7 @@ SESSION_STORAGE_FILE = 'cookies/session_storage.json'
 CALLS_FILE = 'fathom_calls.json'
 PROGRESS_FILE = 'processing_progress.json'
 DOWNLOADS_DIR = 'downloads_batch'
+HTML_DIR = 'html_pages'
 MAX_WORKERS = 4
 
 # AssemblyAI configurações
@@ -396,6 +397,100 @@ class FathomBatchProcessor:
                 f.write(f"[{minutes:02d}:{seconds:02d}] Speaker {utt['speaker']}{channel_info}: {utt['text']}\n")
         
         print(f"   💾 {title} - Dados de speakers salvos em {speakers_path.name} e {speakers_txt_path.name}")
+    
+    async def download_html_pages(self):
+        """Baixa o HTML de todas as páginas do Fathom"""
+        os.makedirs(HTML_DIR, exist_ok=True)
+
+        with open(CALLS_FILE, 'r') as f:
+            videos = json.load(f)
+        
+        print(f"🌐 Baixando HTML de {len(videos)} páginas do Fathom...")
+        print(f"📁 Salvando em: {HTML_DIR}/")
+        print("-" * 50)
+        
+        # Barra de progresso para download de HTML
+        with tqdm(total=len(videos), desc="Baixando HTML", unit="página") as pbar:
+            
+            async def download_and_update_pbar(video_data):
+                """Wrapper para atualizar a barra de progresso após cada download."""
+                await self._download_single_html(video_data)
+                pbar.update(1)
+
+            tasks = []
+            for video in videos:
+                task = asyncio.create_task(download_and_update_pbar(video))
+                tasks.append(task)
+            
+            await asyncio.gather(*tasks)
+        
+        print(f"\n✅ HTML de {len(videos)} páginas baixado com sucesso!")
+        print(f"📁 Arquivos salvos em: {HTML_DIR}/")
+    
+    async def _download_single_html(self, video_data: Dict):
+        """Baixa o HTML de uma página individual do Fathom"""
+        video_id = video_data['id']
+        title = self._sanitize_filename(video_data['title'])
+        url = video_data['url']
+        
+        html_path = Path(HTML_DIR) / f"{title}.html"
+        
+        # Pula se já foi baixado
+        if html_path.exists():
+            print(f"⏭️  {title} - HTML já existe")
+            return
+        
+        async with self.semaphore:
+            print(f"🌐 Baixando HTML: {title}")
+            try:
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(headless=True)
+                    context = await browser.new_context()
+                    page = await context.new_page()
+                    
+                    # Adicionar cookies
+                    for cookie in self.cookies:
+                        cookie_copy = cookie.copy()
+                        cookie_copy.setdefault('domain', 'fathom.video')
+                        cookie_copy.setdefault('path', '/')
+                        cookie_copy.setdefault('secure', True)
+                        cookie_copy.setdefault('httpOnly', False)
+                        if 'sameSite' in cookie_copy:
+                            valor = str(cookie_copy['sameSite']).capitalize()
+                            if valor not in ['Strict', 'Lax', 'None']:
+                                valor = 'Lax'
+                            cookie_copy['sameSite'] = valor
+                        else:
+                            cookie_copy['sameSite'] = 'Lax'
+                        cookie_copy.pop('expirationDate', None)
+                        cookie_copy.pop('storeId', None)
+                        cookie_copy.pop('hostOnly', None)
+                        cookie_copy.pop('session', None)
+                        await context.add_cookies([cookie_copy])
+                    
+                    # Injetar storage
+                    if self.local_storage:
+                        await page.add_init_script(f'Object.assign(window.localStorage, {self.local_storage})')
+                    if self.session_storage:
+                        await page.add_init_script(f'Object.assign(window.sessionStorage, {self.session_storage})')
+                    
+                    # Navegar para a página
+                    await page.goto(url)
+                    await asyncio.sleep(5)  # Aguardar carregamento
+                    
+                    # Obter HTML completo
+                    html_content = await page.content()
+                    
+                    # Salvar HTML
+                    with open(html_path, 'w', encoding='utf-8') as f:
+                        f.write(html_content)
+                    
+                    await browser.close()
+                    
+                print(f"✅ {title} - HTML salvo em {html_path.name}")
+                
+            except Exception as e:
+                print(f"❌ {title} - Erro ao baixar HTML: {str(e)}")
     
     async def run(self):
         """Executa o processamento em lote"""
