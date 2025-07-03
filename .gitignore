@@ -6,11 +6,18 @@
 /downloads_batch/*
 !/downloads_batch/.gitkeep
 
+# Ignora páginas HTML baixadas
+/html_pages/*
+!/html_pages/.gitkeep
+
 # Ignora o arquivo de progresso
 processing_progress.json
 
 # Ignora o arquivo de ambiente com chaves de API
 .env
+
+# Ignora arquivos temporários de teste
+/tmp/*
 
 # Ignora arquivos de sistema do Python
 __pycache__/

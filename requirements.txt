@@ -1,4 +1,4 @@
 playwright
-aiohttp
+assemblyai
 python-dotenv
 tqdm 

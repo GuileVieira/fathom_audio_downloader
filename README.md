@@ -4,10 +4,14 @@ Este projeto automatiza o download, conversão e transcrição de vídeos da pla
 
 ## Funcionalidades
 
--   **Processamento Paralelo:** Processa até 4 vídeos simultaneamente.
+-   **Processamento Paralelo:** Processa até 8 vídeos simultaneamente.
 -   **Extração de Áudio:** Baixa e converte apenas o áudio dos vídeos para MP3, economizando tempo e espaço.
--   **Aceleração de Áudio:** Acelera automaticamente o áudio para 1.5x.
--   **Transcrição Automática:** Usa a API do AssemblyAI para transcrever os áudios.
+-   **Aceleração de Áudio:** Acelera automaticamente o áudio para 1.75x (otimizado para qualidade).
+-   **Transcrição Automática:** Usa a API do AssemblyAI para transcrever os áudios com separação de speakers.
+-   **Extração de Metadados:** Extrai metadados completos das calls diretamente do HTML.
+-   **Estrutura Unificada:** Combina metadados do Fathom com transcrição do AssemblyAI em formato padronizado.
+-   **Transcrição Original:** Preserva a transcrição original do Fathom extraída do HTML.
+-   **Download de HTML:** Baixa o HTML completo das páginas do Fathom para backup/análise.
 -   **Controle de Progresso:** Salva o progresso e permite retomar o processo em caso de falha, evitando trabalho duplicado.
 
 ---
@@ -86,17 +90,188 @@ Ao final, sua pasta `cookies/` **deve conter os 3 arquivos**: `cookies.json`, `l
     ]
     ```
 
-2.  **Execute o Script:** Rode o processador em lote a partir do seu terminal:
+2.  **Execute o Script:**
+    
+    **Para processamento completo (áudio + transcrição + estrutura unificada):**
     ```bash
     python fathom_batch_processor.py
     ```
+    
+    **Para baixar apenas o HTML das páginas:**
+    ```bash
+    python download_html.py
+    ```
+    
+    **Para limpar pastas de vídeos (manter apenas arquivos _final.json):**
+    ```bash
+    python fathom_batch_processor.py clean
+    ```
+
 3.  **Acompanhe o Progresso:** O script exibirá uma barra de progresso geral e barras individuais para cada conversão de áudio.
+
+### 🧹 **Comando Clean - Otimização de Espaço**
+
+O comando `clean` é útil para economizar espaço em disco mantendo apenas os dados essenciais:
+
+```bash
+python fathom_batch_processor.py clean
+```
+
+**O que faz:**
+- ✅ **Mantém:** Todos os arquivos `_final.json` (dados principais estruturados)
+- 🗑️ **Remove:** Todas as pastas individuais dos vídeos com arquivos auxiliares
+- 📊 **Mostra:** Estatísticas de espaço liberado e arquivos mantidos
+
+**Quando usar:**
+- Após processar todos os vídeos e confirmar que os dados estão corretos
+- Quando precisar liberar espaço mas manter os dados estruturados
+- Para backup/arquivamento com foco nos dados essenciais
+
+**Exemplo de saída:**
+```
+🧹 Iniciando limpeza das pastas de vídeos...
+   🗑️  Removida pasta: Title - Video/ (7.4 MB)
+
+🎉 Limpeza concluída!
+   📁 Pastas removidas: 1
+   💾 Espaço liberado: 7.4 MB
+   📄 Arquivos _final.json mantidos: 1
+```
 
 ## 4. Arquivos Gerados
 
-Todos os arquivos processados serão salvos na pasta `downloads_batch/`, organizados pelo título do vídeo:
--   `{título}_1.5x.mp3`
--   `{título}_transcript.txt`
--   `{título}_transcript_details.json` (log de diagnóstico da API)
+### 🆕 **Nova Estrutura Organizada por Vídeo:**
+
+O sistema agora organiza automaticamente os arquivos em pastas individuais para cada vídeo, mantendo apenas o arquivo principal `_final.json` na raiz para fácil acesso:
+
+```
+downloads_batch/
+├── {título}_final.json (arquivo principal - fica na raiz)
+└── {título}/
+    ├── {título}_1.75x.mp3
+    ├── {título}_transcript.txt
+    ├── {título}_speakers.json
+    ├── {título}_speakers.txt
+    ├── {título}_transcript_details.json
+    ├── {título}_metadata.json
+    ├── {título}_summary.txt
+    ├── {título}_fathom_transcript.json
+    ├── {título}_fathom_transcript.txt
+    └── {título}.html
+```
+
+### **Migração Automática:**
+- O sistema **migra automaticamente** arquivos existentes para a nova estrutura
+- Arquivos antigos são movidos para suas respectivas pastas sem perder dados
+- O processo é executado automaticamente na primeira vez que você rodar o script
+
+### Processamento de Áudio e Transcrição:
+
+#### Arquivo Principal (Raiz):
+-   `{título}_final.json` - **Estrutura padronizada** que combina:
+    - Metadados do Fathom (ID, URL, título, data, duração, host, participantes)
+    - Transcrição processada do AssemblyAI em português
+    - Mapeamento automático de speakers (IDs → nomes reais)
+    - Detecção automática de perguntas na conversa
+    - Summary estruturado com purpose, key_takeaways, topics, next_steps
+    - Formato pronto para análise de dados e integração com outras ferramentas
+
+#### Pasta Individual do Vídeo:
+
+**Arquivos de Áudio:**
+-   `{título}_1.75x.mp3` - Áudio acelerado em 1.75x (otimizado para qualidade)
+
+**Transcrição AssemblyAI:**
+-   `{título}_transcript.txt` - Transcrição completa em português
+-   `{título}_speakers.json` - Dados estruturados de speakers com timestamps
+-   `{título}_speakers.txt` - Análise de speakers formatada para leitura
+-   `{título}_transcript_details.json` - Log de diagnóstico da API
+
+**Metadados e Estruturas:**
+-   `{título}_metadata.json` - Metadados completos extraídos do HTML
+-   `{título}_summary.txt` - Resumo formatado da call
+
+**Transcrição Original do Fathom:**
+-   `{título}_fathom_transcript.json` - Transcrição original extraída do HTML
+-   `{título}_fathom_transcript.txt` - Transcrição original formatada
+    - Preserva o texto original em inglês do Fathom
+    - Mantém speakers com nomes reais (ex: "Richard White", "Susannah DuRant")
+    - Inclui cue IDs originais para referência
+
+**Backup HTML:**
+-   `{título}.html` - HTML completo da página do Fathom (salvo automaticamente durante o processamento)
+
+## 5. Estrutura da Saída Unificada
+
+A nova funcionalidade gera um arquivo `_final.json` com a seguinte estrutura padronizada:
+
+```json
+{
+  "id": "342446955",
+  "url": "https://fathom.video/calls/342446955",
+  "share_url": "https://fathom.video/share/...",
+  "title": "Fathom Demo",
+  "date": "Sep 16, 2021",
+  "date_formatted": "2021-09-16",
+  "duration": "8 mins",
+  "host_name": "Guilherme Vieira",
+  "company_domain": "gmail.com",
+  "participants": [
+    {
+      "speaker_id": "A",
+      "name": "Richard White",
+      "is_host": false
+    },
+    {
+      "speaker_id": "B", 
+      "name": "Susannah DuRant",
+      "is_host": false
+    }
+  ],
+  "summary": {
+    "purpose": "Demo e apresentação do produto",
+    "key_takeaways": [...],
+    "topics": [...],
+    "next_steps": [...]
+  },
+  "transcript_text": "Speaker A: Texto da transcrição...",
+  "questions": [
+    {
+      "speaker_id": "A",
+      "question": "Como funciona o sistema de highlights?"
+    }
+  ],
+  "extracted_at": "2025-07-03T18:25:09.205018Z",
+  "status": "extracted"
+}
+```
+
+## 6. Benefícios da Nova Versão
+
+### 📁 **Organização Inteligente:**
+- **Pastas individuais** para cada vídeo mantêm arquivos organizados
+- **Arquivo principal** `_final.json` na raiz para acesso rápido
+- **Migração automática** de arquivos existentes sem perda de dados
+- **Estrutura limpa** facilita navegação e backup
+
+### 🎯 **Dados Estruturados:**
+- **Formato padronizado** para análise de dados
+- **Mapeamento automático** de speakers (IDs do AssemblyAI → nomes reais do Fathom)
+- **Detecção inteligente** de perguntas na conversa
+- **Metadados completos** extraídos automaticamente
+
+### 📊 **Duas Fontes de Transcrição:**
+- **AssemblyAI**: Processada, traduzida para português, com speaker labels
+- **Fathom Original**: Preservada em inglês com nomes reais e cue IDs
+
+### 🚀 **Pronto para Análise:**
+- Estrutura JSON compatível com ferramentas de análise
+- Summary automático com insights estruturados
+- Timestamps e confiança para cada utterance
+- Formato ideal para integração com dashboards e relatórios
+
+---
+
+## 7. Solução de Problemas
 
 O progresso fica salvo em `processing_progress.json`. Para reprocessar um vídeo, basta removê-lo da lista de `processed_ids` neste arquivo. 
