@@ -246,9 +246,9 @@ class FathomBatchProcessor:
         print(f"📝 {title} - Transcrevendo com AssemblyAI Multichannel...")
         
         try:
-            # Configuração para Multichannel transcription
+            # Configuração para Dual Channel transcription
             config = aai.TranscriptionConfig(
-                multichannel=True,
+                dual_channel=True,
                 speaker_labels=True,
                 language_code="pt"
             )
@@ -294,7 +294,7 @@ class FathomBatchProcessor:
         speakers_txt_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.txt"
         
         speakers_data = {
-            'multichannel': transcript.json_response.get('multichannel', False),
+            'dual_channel': transcript.json_response.get('dual_channel', False),
             'audio_channels': transcript.json_response.get('audio_channels', 0),
             'speakers': {},
             'utterances': []
@@ -347,8 +347,8 @@ class FathomBatchProcessor:
             f.write(f"ANÁLISE DE SPEAKERS - {title}\n")
             f.write("=" * 50 + "\n\n")
             
-            if speakers_data['multichannel']:
-                f.write(f"🎙️  MULTICHANNEL: {speakers_data['audio_channels']} canais detectados\n\n")
+            if speakers_data['dual_channel']:
+                f.write(f"🎙️  DUAL CHANNEL: {speakers_data['audio_channels']} canais detectados\n\n")
             
             # Resumo por speaker
             f.write("RESUMO POR SPEAKER:\n")
