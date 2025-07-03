@@ -86,16 +86,16 @@ class FathomBatchProcessor:
             print(f"\n🎬 Iniciando: {title}")
             try:
                 # 1. Capturar URL do m3u8
-                m3u8_url = await self._get_m3u8_url(url)
+                m3u8_url = await self._get_m3u8_url(url, title)
                 if not m3u8_url:
                     raise Exception("m3u8 não encontrado")
                 
                 # 2. Baixar e converter áudio diretamente do m3u8
                 mp3_path = await self._download_and_convert_audio(m3u8_url, title)
                 
-                # 3. Transcrever com AssemblyAI usando Multichannel
+                # 3. Transcrever com AssemblyAI usando speaker_labels
                 if ASSEMBLYAI_API_KEY and ASSEMBLYAI_API_KEY != 'sua_chave_aqui':
-                    await self._transcribe_with_multichannel(mp3_path, title)
+                    await self._transcribe_with_speaker_labels(mp3_path, title)
                 else:
                     print(f"⚠️  {title} - Pulando transcrição (sem API key ou com chave placeholder)")
                 
@@ -114,8 +114,8 @@ class FathomBatchProcessor:
                 })
                 self._save_progress()
     
-    async def _get_m3u8_url(self, video_url: str) -> Optional[str]:
-        """Captura a URL do m3u8 usando Playwright"""
+    async def _get_m3u8_url(self, video_url: str, title: Optional[str] = None) -> Optional[str]:
+        """Captura a URL do m3u8 usando Playwright e salva o HTML"""
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context()
@@ -160,6 +160,26 @@ class FathomBatchProcessor:
             # Recarregar após cookies
             await page.goto(video_url)
             await asyncio.sleep(10)
+            
+            # Salvar HTML da página
+            try:
+                html_content = await page.content()
+                html_dir = Path("html_pages")
+                html_dir.mkdir(exist_ok=True)
+                
+                # Usar o título sanitizado ou ID do vídeo para o HTML
+                if title:
+                    filename = self._sanitize_filename(title)
+                else:
+                    filename = video_url.split('/')[-1]
+                html_path = html_dir / f"{filename}.html"
+                
+                with open(html_path, 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+                print(f"💾 HTML salvo: {html_path}")
+                
+            except Exception as e:
+                print(f"⚠️  Erro ao salvar HTML: {str(e)}")
             
             await browser.close()
             
@@ -234,8 +254,8 @@ class FathomBatchProcessor:
 
         return mp3_path
     
-    async def _transcribe_with_multichannel(self, mp3_path: Path, title: str) -> Optional[str]:
-        """Transcreve áudio usando AssemblyAI com detecção automática de canais"""
+    async def _transcribe_with_speaker_labels(self, mp3_path: Path, title: str) -> Optional[str]:
+        """Transcreve áudio usando AssemblyAI com speaker_labels para áudios mono"""
         transcript_path = Path(DOWNLOADS_DIR) / f"{title}_transcript.txt"
         speakers_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.json"
         json_response_path = Path(DOWNLOADS_DIR) / f"{title}_transcript_details.json"
@@ -247,32 +267,15 @@ class FathomBatchProcessor:
         print(f"📝 {title} - Transcrevendo com AssemblyAI...")
         
         try:
-            # Primeiro, tenta com multichannel (para áudios com canais separados)
-            transcript = None
-            config_used = None
-            
-            try:
-                print(f"   🔍 {title} - Tentando transcrição multichannel...")
-                config = aai.TranscriptionConfig(
-                    multichannel=True,
-                    language_code="pt"
-                )
-                transcript = await self._execute_transcription(mp3_path, config)
-                config_used = "multichannel"
-                print(f"   ✅ {title} - Multichannel transcription bem-sucedida!")
-                
-            except Exception as multichannel_error:
-                print(f"   ⚠️  {title} - Multichannel falhou: {str(multichannel_error)}")
-                print(f"   🔄 {title} - Tentando com speaker_labels...")
-                
-                # Se multichannel falhou, tenta com speaker_labels
-                config = aai.TranscriptionConfig(
-                    speaker_labels=True,
-                    language_code="pt"
-                )
-                transcript = await self._execute_transcription(mp3_path, config)
-                config_used = "speaker_labels"
-                print(f"   ✅ {title} - Speaker labels transcription bem-sucedida!")
+            # Usar speaker_labels para áudios mono (que é o caso do Fathom)
+            print(f"   🔍 {title} - Transcrevendo com speaker_labels...")
+            config = aai.TranscriptionConfig(
+                speaker_labels=True,
+                language_code="pt"
+            )
+            transcript = await self._execute_transcription(mp3_path, config)
+            config_used = "speaker_labels"
+            print(f"   ✅ {title} - Speaker labels transcription bem-sucedida!")
             
             # Processar resultado
             if transcript and transcript.status == aai.TranscriptStatus.completed:
@@ -319,8 +322,8 @@ class FathomBatchProcessor:
         speakers_txt_path = Path(DOWNLOADS_DIR) / f"{title}_speakers.txt"
         
         speakers_data = {
-            'multichannel': transcript.json_response.get('multichannel', False),
-            'audio_channels': transcript.json_response.get('audio_channels', 0),
+            'speaker_labels': True,
+            'audio_channels': transcript.json_response.get('audio_channels', 1),
             'speakers': {},
             'utterances': []
         }
@@ -372,8 +375,7 @@ class FathomBatchProcessor:
             f.write(f"ANÁLISE DE SPEAKERS - {title}\n")
             f.write("=" * 50 + "\n\n")
             
-            if speakers_data['multichannel']:
-                f.write(f"🎙️  MULTICHANNEL: {speakers_data['audio_channels']} canais detectados\n\n")
+            f.write(f"🎙️  SPEAKER LABELS: Áudio mono com {len(speakers_data['speakers'])} speakers detectados\n\n")
             
             # Resumo por speaker
             f.write("RESUMO POR SPEAKER:\n")
