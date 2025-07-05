@@ -1,24 +1,25 @@
-# Ignora os dados de autenticação sensíveis
-/cookies/*
-!/cookies/.gitkeep
-
-# Ignora os arquivos de mídia e transcrição baixados
-/downloads_batch/*
-!/downloads_batch/.gitkeep
-
-# Ignora páginas HTML baixadas
-/html_pages/*
-!/html_pages/.gitkeep
-
-# Ignora o arquivo de progresso
-processing_progress.json
-
-# Ignora o arquivo de ambiente com chaves de API
+.vscode/
+*.session.sql
 .env
-
-# Ignora arquivos temporários de teste
-/tmp/*
-
-# Ignora arquivos de sistema do Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
