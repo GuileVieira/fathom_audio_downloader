@@ -1,25 +1,18 @@
 """
-Cliente PostgreSQL direto para máxima performance com Supabase
+Cliente PostgreSQL direto para máxima performance
 """
 
+import asyncio
 import logging
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, date
 import json
 from contextlib import contextmanager
 
-try:
-    import psycopg2
-    from psycopg2.extras import RealDictCursor, Json, execute_batch
-    from psycopg2.pool import ThreadedConnectionPool
-    PSYCOPG2_AVAILABLE = True
-except ImportError:
-    PSYCOPG2_AVAILABLE = False
-    psycopg2 = None
-    RealDictCursor = None
-    Json = None
-    execute_batch = None
-    ThreadedConnectionPool = None
+import psycopg2
+from psycopg2 import pool, sql
+from psycopg2.extras import RealDictCursor, execute_values, Json
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from config import Config
 
@@ -32,13 +25,15 @@ class PostgreSQLClient:
     """Cliente PostgreSQL direto para máxima performance"""
     
     def __init__(self):
-        self.pool: Optional[ThreadedConnectionPool] = None
+        self.pool: Optional[pool.ThreadedConnectionPool] = None
         self.connected = False
         self._initialize_pool()
     
     def _initialize_pool(self):
         """Inicializa pool de conexões PostgreSQL"""
-        if not PSYCOPG2_AVAILABLE:
+        try:
+            import psycopg2
+        except ImportError:
             logger.error("❌ psycopg2 não instalado. Execute: pip install psycopg2-binary")
             return
         
@@ -54,14 +49,14 @@ class PostgreSQLClient:
                 'application_name': 'fathom_analytics'
             }
             
-            # SSL apenas para Supabase ou hosts remotos
-            if 'supabase.co' in Config.POSTGRES_HOST or Config.POSTGRES_HOST not in ['localhost', '127.0.0.1', '0.0.0.0']:
+            # SSL apenas para hosts remotos
+            if Config.POSTGRES_HOST not in ['localhost', '127.0.0.1', '0.0.0.0']:
                 connection_params['sslmode'] = 'require'
             else:
                 connection_params['sslmode'] = 'prefer'  # Para PostgreSQL local
             
             # Criar pool de conexões
-            self.pool = ThreadedConnectionPool(
+            self.pool = pool.ThreadedConnectionPool(
                 minconn=2,  # Mínimo 2 conexões
                 maxconn=10,  # Máximo 10 conexões
                 **connection_params
@@ -114,7 +109,7 @@ class PostgreSQLClient:
             logger.error(f"❌ Erro ao testar conexão: {e}")
             return False
     
-    def execute_query(self, sql: str, params: tuple = None) -> List[Dict[str, Any]]:
+    def execute_query(self, sql: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]:
         """Executa query SELECT e retorna resultados"""
         try:
             with self.get_connection() as conn:
@@ -127,12 +122,12 @@ class PostgreSQLClient:
             logger.error(f"   SQL: {sql}")
             return []
     
-    def execute_single(self, sql: str, params: tuple = None) -> Optional[Dict[str, Any]]:
+    def execute_single(self, sql: str, params: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
         """Executa query e retorna um único resultado"""
         results = self.execute_query(sql, params)
         return results[0] if results else None
     
-    def execute_insert(self, sql: str, params: tuple = None) -> Optional[Dict[str, Any]]:
+    def execute_insert(self, sql: str, params: Optional[tuple] = None) -> Optional[Dict[str, Any]]:
         """Executa INSERT e retorna o registro inserido"""
         try:
             with self.get_connection() as conn:
@@ -181,7 +176,7 @@ class PostgreSQLClient:
         try:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
-                    execute_batch(cur, sql, data_list, page_size=page_size)
+                    execute_values(cur, sql, data_list, page_size=page_size)
                     conn.commit()
                     
             logger.info(f"✅ Batch insert: {len(data_list)} registros")
@@ -531,7 +526,7 @@ class PostgreSQLClient:
         """Retorna status da conexão"""
         return {
             'connected': self.connected,
-            'psycopg2_available': PSYCOPG2_AVAILABLE,
+            'psycopg2_available': True,
             'host': Config.POSTGRES_HOST if self.connected else None,
             'database': Config.POSTGRES_DB if self.connected else None,
             'pool_initialized': self.pool is not None

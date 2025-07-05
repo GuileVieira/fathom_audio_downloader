@@ -32,7 +32,7 @@ def main():
     
     # Verifica configurações
     print("\n1. Verificando configurações...")
-    Config.print_status()
+    Config.print_config()
     
     if not Config.validate():
         print("\n❌ Configurações inválidas. Configure o arquivo .env")

@@ -1,6 +1,6 @@
 """
-DatabaseManager refatorado para PostgreSQL direto
-Performance 3-5x superior ao SDK Supabase
+Gerenciador de banco de dados para Fathom Analytics
+Performance otimizada com PostgreSQL direto
 """
 
 import logging

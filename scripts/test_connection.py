@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Script para testar conexão PostgreSQL direta
-Performance otimizada com Supabase
+Script de teste de conexão com PostgreSQL
+Performance otimizada com PostgreSQL direto
 """
 
 import sys
@@ -299,7 +299,7 @@ def main():
     
     # Verifica configurações
     print("\n1. Verificando configurações...")
-    Config.print_status()
+    Config.print_config()
     
     if not Config.validate():
         print("\n❌ Configurações inválidas!")

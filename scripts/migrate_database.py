@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Script para executar migração do banco de dados PostgreSQL
-Performance otimizada com conexão direta ao Supabase
+Script de migração do banco de dados
+Performance otimizada com PostgreSQL direto
 """
 
 import sys
@@ -11,7 +11,7 @@ from pathlib import Path
 # Adiciona o diretório raiz ao path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from database.postgres_client import PostgreSQLClient
+from database.postgres_client import PostgresClient
 from config import Config
 import logging
 
@@ -24,29 +24,21 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    """Função principal do script de migração PostgreSQL"""
+    """Executa migração do banco de dados"""
+    print("🔄 Fathom Analytics - Migração do Banco de Dados")
+    print("=" * 60)
     
-    print("🚀 Fathom Analytics - Migração PostgreSQL Direto")
-    print("=" * 55)
-    print("🔥 PERFORMANCE OTIMIZADA - 3-5x mais rápido que SDK!")
-    print("=" * 55)
-    
-    # Verifica configurações
-    print("\n1. Verificando configurações PostgreSQL...")
-    Config.print_status()
-    
+    # Valida configurações
     if not Config.validate():
-        print("\n❌ Configurações PostgreSQL inválidas. Configure o arquivo .env:")
-        print("   POSTGRES_HOST=db.seu-projeto.supabase.co")
-        print("   POSTGRES_PASSWORD=sua_senha_postgres")
-        print("   POSTGRES_USER=postgres")
-        print("   POSTGRES_DB=postgres")
-        print("   POSTGRES_PORT=5432")
-        return False
+        print("\n❌ Configure as variáveis de ambiente primeiro!")
+        print("💡 Copie env.example para .env e configure:")
+        print("   POSTGRES_HOST=seu-host.postgres.com")
+        print("   POSTGRES_PASSWORD=sua_senha_aqui")
+        return
     
     # Inicializa cliente PostgreSQL
     print("\n2. Conectando ao PostgreSQL...")
-    client = PostgreSQLClient()
+    client = PostgresClient()
     
     if not client.connected:
         print("❌ Não foi possível conectar ao PostgreSQL")

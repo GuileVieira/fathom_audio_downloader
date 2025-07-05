@@ -56,26 +56,31 @@ class FathomReportsGenerator:
             # Estatísticas gerais
             print("\n📈 ESTATÍSTICAS GERAIS:")
             print("-" * 30)
-            print(f"📞 Total de Chamadas: {analytics['total_calls']}")
             
-            if analytics.get('summary_stats'):
-                stats = analytics['summary_stats']
-                print(f"⏱️  Duração Total: {stats.get('total_duration_minutes', 0)} minutos")
-                print(f"📊 Duração Média: {stats.get('avg_duration_minutes', 0):.1f} minutos")
-                print(f"👥 Participantes Únicos: {stats.get('unique_participants', 0)}")
-                print(f"🏢 Empresas Únicas: {stats.get('unique_companies', 0)}")
-                print(f"🎤 Hosts Únicos: {stats.get('unique_hosts', 0)}")
+            # Busca estatísticas básicas
+            basic_stats = analytics.get('basic_stats', {})
+            if basic_stats:
+                print(f"📞 Total de Chamadas: {basic_stats.get('total_calls', 0)}")
+                print(f"⏱️  Duração Total: {basic_stats.get('total_duration', 0)} minutos")
+                print(f"📊 Duração Média: {basic_stats.get('avg_duration', 0):.1f} minutos")
+                print(f"👥 Participantes Únicos: {basic_stats.get('unique_participants', 0)}")
+                print(f"🏢 Empresas Únicas: {basic_stats.get('unique_companies', 0)}")
+                print(f"🎤 Hosts Únicos: {basic_stats.get('unique_hosts', 0)}")
+            else:
+                print("❌ Estatísticas básicas não encontradas")
             
             # Top Hosts
             print("\n🏆 TOP HOSTS:")
             print("-" * 30)
-            host_stats = analytics.get('by_host', {})
-            sorted_hosts = sorted(host_stats.items(), key=lambda x: x[1]['call_count'], reverse=True)
+            top_hosts = analytics.get('top_hosts', [])
             
-            for i, (host, stats) in enumerate(sorted_hosts[:5], 1):
-                print(f"{i}. {host}")
-                print(f"   📞 Chamadas: {stats['call_count']}")
-                print(f"   ⏱️  Duração Total: {stats['total_duration']:.0f} min")
+            if top_hosts:
+                for i, host in enumerate(top_hosts[:5], 1):
+                    print(f"{i}. {host.get('host_name', 'Sem nome')}")
+                    print(f"   📞 Chamadas: {host.get('call_count', 0)}")
+                    print(f"   ⏱️  Duração Total: {host.get('total_duration', 0):.0f} min")
+            else:
+                print("❌ Dados de hosts não encontrados")
             
             print("\n✅ Relatório gerado com sucesso!")
             return True
