@@ -41,7 +41,7 @@ class FathomReportsGenerator:
         print("📊 FATHOM ANALYTICS - RELATÓRIO GERAL")
         print("=" * 60)
         
-        if not self.db_manager.is_connected():
+        if not self.db_manager.connected:
             print("❌ Não conectado ao banco de dados")
             return False
         
@@ -89,7 +89,7 @@ class FathomReportsGenerator:
         
         print("🌐 Gerando relatório HTML...")
         
-        if not self.db_manager.is_connected():
+        if not self.db_manager.connected:
             print("❌ Não conectado ao banco de dados")
             return False
         
@@ -128,7 +128,7 @@ class FathomReportsGenerator:
         
         print("📄 Gerando relatório JSON...")
         
-        if not self.db_manager.is_connected():
+        if not self.db_manager.connected:
             print("❌ Não conectado ao banco de dados")
             return False
         

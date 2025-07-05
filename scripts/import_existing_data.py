@@ -47,7 +47,7 @@ def main():
     print(f"   Inicializado: {status['initialized']}")
     print(f"   Conectado: {status['supabase_status']['connected']}")
     
-    if not db_manager.is_connected():
+    if not db_manager.connected:
         print("❌ Não foi possível conectar ao banco de dados")
         print("💡 Execute primeiro: python scripts/migrate_database.py")
         return False
