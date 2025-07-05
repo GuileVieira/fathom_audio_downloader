@@ -1,0 +1,14 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "server": "0.0.0.0",
+            "port": 5432,
+            "askForPassword": true,
+            "driver": "PostgreSQL",
+            "name": "Pg Local",
+            "database": "fathom_analytics",
+            "username": "admin_dg4YAbX"
+        }
+    ]
+}

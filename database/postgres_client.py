@@ -50,10 +50,15 @@ class PostgreSQLClient:
                 'database': Config.POSTGRES_DB,
                 'user': Config.POSTGRES_USER,
                 'password': Config.POSTGRES_PASSWORD,
-                'sslmode': 'require',  # Supabase exige SSL
                 'connect_timeout': 10,
                 'application_name': 'fathom_analytics'
             }
+            
+            # SSL apenas para Supabase ou hosts remotos
+            if 'supabase.co' in Config.POSTGRES_HOST or Config.POSTGRES_HOST not in ['localhost', '127.0.0.1', '0.0.0.0']:
+                connection_params['sslmode'] = 'require'
+            else:
+                connection_params['sslmode'] = 'prefer'  # Para PostgreSQL local
             
             # Criar pool de conexões
             self.pool = ThreadedConnectionPool(
@@ -152,17 +157,20 @@ class PostgreSQLClient:
             
             # Colunas para UPDATE (exceto a chave de conflito)
             update_columns = [col for col in columns if col != conflict_column]
-            update_set = ', '.join([f"{col} = EXCLUDED.{col}" for col in update_columns])
             
-            sql = f"""
-                INSERT INTO {table} ({columns_str})
-                VALUES ({placeholders})
-                ON CONFLICT ({conflict_column}) DO UPDATE SET
-                {update_set}
-                RETURNING *
-            """
+            if update_columns:
+                update_set = ', '.join([f"{col} = EXCLUDED.{col}" for col in update_columns])
+                sql = f"""INSERT INTO {table} ({columns_str}) VALUES ({placeholders}) ON CONFLICT ({conflict_column}) DO UPDATE SET {update_set} RETURNING *"""
+            else:
+                sql = f"""INSERT INTO {table} ({columns_str}) VALUES ({placeholders}) ON CONFLICT ({conflict_column}) DO NOTHING RETURNING *"""
             
-            return self.execute_insert(sql, tuple(values))
+            # Executa diretamente sem usar execute_insert para evitar duplicação do RETURNING
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(sql, tuple(values))
+                    result = cur.fetchone()
+                    conn.commit()
+                    return dict(result) if result else None
             
         except Exception as e:
             logger.error(f"❌ Erro ao executar upsert: {e}")
@@ -297,14 +305,14 @@ class PostgreSQLClient:
             # Top tópicos
             analytics['top_topics'] = self.execute_query("""
                 SELECT 
-                    title,
+                    ct.title,
                     COUNT(*) as frequency,
-                    COUNT(DISTINCT call_id) as unique_calls,
-                    AVG(array_length(points, 1)) as avg_points
+                    COUNT(DISTINCT ct.call_id) as unique_calls,
+                    AVG(array_length(ct.points, 1)) as avg_points
                 FROM call_topics ct
                 JOIN fathom_calls fc ON ct.call_id = fc.id
                 WHERE fc.status = 'extracted'
-                GROUP BY title
+                GROUP BY ct.title
                 ORDER BY frequency DESC
                 LIMIT 10
             """)
@@ -326,14 +334,14 @@ class PostgreSQLClient:
             # Participantes mais ativos
             analytics['top_participants'] = self.execute_query("""
                 SELECT 
-                    name,
+                    cp.name,
                     COUNT(*) as call_count,
-                    COUNT(CASE WHEN is_host THEN 1 END) as hosted_calls,
+                    COUNT(CASE WHEN cp.is_host THEN 1 END) as hosted_calls,
                     AVG(fc.duration_minutes) as avg_call_duration
                 FROM call_participants cp
                 JOIN fathom_calls fc ON cp.call_id = fc.id
                 WHERE fc.status = 'extracted'
-                GROUP BY name
+                GROUP BY cp.name
                 ORDER BY call_count DESC
                 LIMIT 10
             """)

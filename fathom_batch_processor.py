@@ -983,11 +983,11 @@ class FathomBatchProcessor:
             
             # 🆕 HOOK: Salvar no banco de dados automaticamente
             try:
-                from database_manager import get_database_manager
-                db_manager = get_database_manager()
+                from database_manager import DatabaseManager
+                db_manager = DatabaseManager()
                 
-                if db_manager.is_connected():
-                    success = db_manager.save_call_data(final_path)
+                if db_manager.connected:
+                    success = db_manager.save_call(unified_data)
                     if success:
                         print(f"   💾 Dados salvos no banco: {title}")
                     else:

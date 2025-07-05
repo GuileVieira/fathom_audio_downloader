@@ -93,18 +93,19 @@ def test_insert_and_query():
     """Testa inserção e consulta de dados"""
     print("\n💾 Testando inserção e consulta...")
     
-    # Dados de teste
+    # Dados de teste corrigidos para validação Pydantic
     test_data = {
         'id': 999999,
         'url': 'https://test.fathom.video/test',
         'title': 'Teste de Conexão PostgreSQL',
+        'date': '2024-01-15',  # Campo obrigatório
         'date_formatted': '2024-01-15',
         'duration': '15min',
         'host_name': 'Teste Host',
         'company_domain': 'test.com',
         'status': 'test',
         'participants': [
-            {'speaker_id': 1, 'name': 'Participante Teste', 'is_host': True}
+            {'speaker_id': '1', 'name': 'Participante Teste', 'is_host': True}  # speaker_id como string
         ],
         'summary': {
             'topics': [
@@ -114,7 +115,7 @@ def test_insert_and_query():
             'next_steps': ['Próximo passo teste']
         },
         'questions': [
-            {'speaker_id': 1, 'question': 'Pergunta teste?'}
+            {'speaker_id': '1', 'question': 'Pergunta teste?'}  # speaker_id como string
         ]
     }
     

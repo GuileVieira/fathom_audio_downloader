@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from database.postgres_client import PostgreSQLClient
-from database.models import FathomCall, CallSummary, CallParticipant, CallTopic, CallTakeaway, CallNextStep, CallQuestion
+from database.models import FathomCall, CallSummary, CallParticipant, CallTopic, CallQuestion
 from config import Config
 
 # Configurar logging
