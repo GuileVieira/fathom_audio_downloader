@@ -75,77 +75,87 @@ class FathomBatchProcessor:
         """Remove caracteres inválidos do nome do arquivo"""
         return re.sub(r'[<>:"/\\|?*]', '_', filename).strip()
     
-    def _get_video_dir(self, title: str) -> Path:
+    def _create_unique_filename(self, title: str, video_id: str) -> str:
+        """Cria nome único combinando título sanitizado + ID da meeting"""
+        sanitized_title = self._sanitize_filename(title)
+        # Limita o título a 100 caracteres para evitar nomes muito longos
+        if len(sanitized_title) > 100:
+            sanitized_title = sanitized_title[:100].rstrip('_')
+        
+        return f"{sanitized_title}_{video_id}"
+    
+    def _get_video_dir(self, unique_filename: str) -> Path:
         """Retorna o diretório específico do vídeo"""
-        video_dir = Path(DOWNLOADS_DIR) / title
+        video_dir = Path(DOWNLOADS_DIR) / unique_filename
         video_dir.mkdir(exist_ok=True)
         return video_dir
     
-    def _get_video_paths(self, title: str) -> Dict[str, Path]:
+    def _get_video_paths(self, unique_filename: str) -> Dict[str, Path]:
         """Retorna todos os caminhos de arquivos para um vídeo específico"""
-        video_dir = self._get_video_dir(title)
+        video_dir = self._get_video_dir(unique_filename)
         
         return {
             # Arquivo principal (fica na raiz)
-            'final': Path(DOWNLOADS_DIR) / f"{title}_final.json",
+            'final': Path(DOWNLOADS_DIR) / f"{unique_filename}_final.json",
             
             # Arquivos organizados na pasta do vídeo
             'video_dir': video_dir,
-            'mp3': video_dir / f"{title}_1.75x.mp3",
-            'transcript': video_dir / f"{title}_transcript.txt",
-            'speakers_json': video_dir / f"{title}_speakers.json",
-            'speakers_txt': video_dir / f"{title}_speakers.txt",
-            'transcript_details': video_dir / f"{title}_transcript_details.json",
-            'metadata': video_dir / f"{title}_metadata.json",
-            'summary': video_dir / f"{title}_summary.txt",
-            'fathom_transcript_json': video_dir / f"{title}_fathom_transcript.json",
-            'fathom_transcript_txt': video_dir / f"{title}_fathom_transcript.txt",
-            'html': video_dir / f"{title}.html"
+            'mp3': video_dir / f"{unique_filename}_1.75x.mp3",
+            'transcript': video_dir / f"{unique_filename}_transcript.txt",
+            'speakers_json': video_dir / f"{unique_filename}_speakers.json",
+            'speakers_txt': video_dir / f"{unique_filename}_speakers.txt",
+            'transcript_details': video_dir / f"{unique_filename}_transcript_details.json",
+            'metadata': video_dir / f"{unique_filename}_metadata.json",
+            'summary': video_dir / f"{unique_filename}_summary.txt",
+            'fathom_transcript_json': video_dir / f"{unique_filename}_fathom_transcript.json",
+            'fathom_transcript_txt': video_dir / f"{unique_filename}_fathom_transcript.txt",
+            'html': video_dir / f"{unique_filename}.html"
         }
     
     async def process_video(self, video_data: Dict):
         """Processa um vídeo individual"""
-        video_id = video_data['id']
-        title = self._sanitize_filename(video_data['title'])
+        video_id = str(video_data['id'])
+        title = video_data['title']
+        unique_filename = self._create_unique_filename(title, video_id)
         url = video_data['url']
         
         # Pula se já foi processado
         if video_id in self.progress['processed_ids']:
-            print(f"⏭️  {title} - Já processado anteriormente")
+            print(f"⏭️  {title} (ID: {video_id}) - Já processado anteriormente")
             return
         
         async with self.semaphore:
-            print(f"\n🎬 Iniciando: {title}")
+            print(f"\n🎬 Iniciando: {title} (ID: {video_id})")
             try:
                 # 1. Capturar URL do m3u8
-                m3u8_url = await self._get_m3u8_url(url, title)
+                m3u8_url = await self._get_m3u8_url(url, unique_filename)
                 if not m3u8_url:
                     raise Exception("m3u8 não encontrado")
                 
                 # 2. Baixar e converter áudio diretamente do m3u8
-                mp3_path = await self._download_and_convert_audio(m3u8_url, title)
+                mp3_path = await self._download_and_convert_audio(m3u8_url, unique_filename)
                 
                 # 3. Transcrever com AssemblyAI usando speaker_labels
                 if ASSEMBLYAI_API_KEY and ASSEMBLYAI_API_KEY != 'sua_chave_aqui':
-                    await self._transcribe_with_speaker_labels(mp3_path, title)
+                    await self._transcribe_with_speaker_labels(mp3_path, unique_filename)
                 
                     # 4. Extrair e salvar metadados do HTML
-                    paths = self._get_video_paths(title)
+                    paths = self._get_video_paths(unique_filename)
                     if paths['html'].exists():
-                        await self.save_call_metadata(title)
+                        await self.save_call_metadata(unique_filename)
                     
                     # 5. Criar estrutura unificada
-                    await self.save_unified_output(title)
+                    await self.save_unified_output(unique_filename)
                 else:
-                    print(f"⚠️  {title} - Pulando transcrição (sem API key ou com chave placeholder)")
+                    print(f"⚠️  {title} (ID: {video_id}) - Pulando transcrição (sem API key ou com chave placeholder)")
                 
                 # Marcar como processado
                 self.progress['processed_ids'].append(video_id)
                 self._save_progress()
-                print(f"✅ {title} - Processamento completo!")
+                print(f"✅ {title} (ID: {video_id}) - Processamento completo!")
                 
             except Exception as e:
-                print(f"❌ {title} - Erro: {str(e)}")
+                print(f"❌ {title} (ID: {video_id}) - Erro: {str(e)}")
                 self.progress['failed_ids'].append({
                     'id': video_id,
                     'title': title,
@@ -154,7 +164,7 @@ class FathomBatchProcessor:
                 })
                 self._save_progress()
     
-    async def _get_m3u8_url(self, video_url: str, title: Optional[str] = None) -> Optional[str]:
+    async def _get_m3u8_url(self, video_url: str, unique_filename: Optional[str] = None) -> Optional[str]:
         """Captura a URL do m3u8 usando Playwright e salva o HTML"""
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -205,13 +215,12 @@ class FathomBatchProcessor:
             try:
                 html_content = await page.content()
                 
-                # Usar o título sanitizado ou ID do vídeo para o HTML
-                if title:
-                    filename = self._sanitize_filename(title)
-                    paths = self._get_video_paths(filename)
+                # Usar o nome único ou ID do vídeo para o HTML
+                if unique_filename:
+                    paths = self._get_video_paths(unique_filename)
                     html_path = paths['html']
                 else:
-                    # Fallback para HTML sem título
+                    # Fallback para HTML sem nome único
                     html_dir = Path("html_pages")
                     html_dir.mkdir(exist_ok=True)
                     filename = video_url.split('/')[-1]
@@ -228,18 +237,18 @@ class FathomBatchProcessor:
             
             return m3u8_urls[0] if m3u8_urls else None
     
-    async def _download_and_convert_audio(self, m3u8_url: str, title: str) -> Path:
+    async def _download_and_convert_audio(self, m3u8_url: str, unique_filename: str) -> Path:
         """Baixa e converte o áudio do stream m3u8 para MP3 acelerado em 1.75x"""
         os.makedirs(DOWNLOADS_DIR, exist_ok=True)
         # Usar nova estrutura de pastas
-        paths = self._get_video_paths(title)
+        paths = self._get_video_paths(unique_filename)
         mp3_path = paths['mp3'].resolve()
 
         if mp3_path.exists():
-            print(f"🎵 {title} - MP3 já existe, pulando download/conversão")
+            print(f"🎵 {unique_filename} - MP3 já existe, pulando download/conversão")
             return mp3_path
 
-        print(f"⬇️🎵 {title} - Baixando e convertendo áudio...")
+        print(f"⬇️🎵 {unique_filename} - Baixando e convertendo áudio...")
         cookies_str = '; '.join([f"{c['name']}={c['value']}" for c in self.cookies if 'name' in c and 'value' in c])
 
         # 1. Obter duração com ffprobe
@@ -280,7 +289,7 @@ class FathomBatchProcessor:
         )
         
         # 3. Barra de progresso com TQDM
-        pbar = tqdm(total=duration, unit='s', desc=f"Convertendo {title}", ncols=80)
+        pbar = tqdm(total=duration, unit='s', desc=f"Convertendo {unique_filename}", ncols=80)
         while True:
             line = await process.stdout.readline()
             if not line:
@@ -298,29 +307,29 @@ class FathomBatchProcessor:
 
         return mp3_path
     
-    async def _transcribe_with_speaker_labels(self, mp3_path: Path, title: str) -> Optional[str]:
+    async def _transcribe_with_speaker_labels(self, mp3_path: Path, unique_filename: str) -> Optional[str]:
         """Transcreve áudio usando AssemblyAI com speaker_labels para áudios mono"""
-        paths = self._get_video_paths(title)
+        paths = self._get_video_paths(unique_filename)
         transcript_path = paths['transcript']
         speakers_path = paths['speakers_json']
         json_response_path = paths['transcript_details']
 
         if transcript_path.exists():
-            print(f"📝 {title} - Transcrição já existe")
+            print(f"📝 {unique_filename} - Transcrição já existe")
             return transcript_path.read_text(encoding='utf-8')
         
-        print(f"📝 {title} - Transcrevendo com AssemblyAI...")
+        print(f"📝 {unique_filename} - Transcrevendo com AssemblyAI...")
         
         try:
             # Usar speaker_labels para áudios mono (que é o caso do Fathom)
-            print(f"   🔍 {title} - Transcrevendo com speaker_labels...")
+            print(f"   🔍 {unique_filename} - Transcrevendo com speaker_labels...")
             config = aai.TranscriptionConfig(
                 speaker_labels=True,
                 language_code="pt"
             )
             transcript = await self._execute_transcription(mp3_path, config)
             config_used = "speaker_labels"
-            print(f"   ✅ {title} - Speaker labels transcription bem-sucedida!")
+            print(f"   ✅ {unique_filename} - Speaker labels transcription bem-sucedida!")
             
             # Processar resultado
             if transcript and transcript.status == aai.TranscriptStatus.completed:
@@ -333,9 +342,9 @@ class FathomBatchProcessor:
                 transcript_path.write_text(transcript_text, encoding='utf-8')
                 
                 # Processar e salvar informações de speakers separadamente
-                await self._process_speakers(transcript, title)
+                await self._process_speakers(transcript, unique_filename)
                 
-                print(f"✅ {title} - Transcrição completa usando {config_used}!")
+                print(f"✅ {unique_filename} - Transcrição completa usando {config_used}!")
                 if transcript.json_response.get('audio_channels'):
                     print(f"   📊 Canais de áudio detectados: {transcript.json_response['audio_channels']}")
                 
@@ -344,7 +353,7 @@ class FathomBatchProcessor:
                 raise Exception(f"Erro na transcrição: {transcript.error if transcript else 'Falha na transcrição'}")
                 
         except Exception as e:
-            print(f"❌ {title} - Erro na transcrição: {str(e)}")
+            print(f"❌ {unique_filename} - Erro na transcrição: {str(e)}")
             raise e
     
     async def _execute_transcription(self, mp3_path: Path, config):
@@ -361,9 +370,9 @@ class FathomBatchProcessor:
         
         return transcript
     
-    async def _process_speakers(self, transcript, title: str):
+    async def _process_speakers(self, transcript, unique_filename: str):
         """Processa e salva informações de speakers separadamente"""
-        paths = self._get_video_paths(title)
+        paths = self._get_video_paths(unique_filename)
         speakers_path = paths['speakers_json']
         speakers_txt_path = paths['speakers_txt']
         
@@ -376,7 +385,7 @@ class FathomBatchProcessor:
         
         # Processar utterances se existirem
         if hasattr(transcript, 'utterances') and transcript.utterances:
-            print(f"   🗣️  {title} - Processando {len(transcript.utterances)} utterances")
+            print(f"   🗣️  {unique_filename} - Processando {len(transcript.utterances)} utterances")
             
             for utt in transcript.utterances:
                 speaker_id = utt.speaker
@@ -418,7 +427,7 @@ class FathomBatchProcessor:
         
         # Criar arquivo de texto formatado para leitura fácil
         with open(speakers_txt_path, 'w', encoding='utf-8') as f:
-            f.write(f"ANÁLISE DE SPEAKERS - {title}\n")
+            f.write(f"ANÁLISE DE SPEAKERS - {unique_filename}\n")
             f.write("=" * 50 + "\n\n")
             
             # Resumo por speaker
@@ -442,7 +451,7 @@ class FathomBatchProcessor:
                 channel_info = f" (Canal {utt['channel']})" if utt['channel'] else ""
                 f.write(f"[{minutes:02d}:{seconds:02d}] Speaker {utt['speaker']}{channel_info}: {utt['text']}\n")
         
-        print(f"   💾 {title} - Dados de speakers salvos em {speakers_path.name} e {speakers_txt_path.name}")
+        print(f"   💾 {unique_filename} - Dados de speakers salvos em {speakers_path.name} e {speakers_txt_path.name}")
     
     async def download_html_pages(self):
         """Baixa o HTML de todas as páginas do Fathom"""
@@ -673,11 +682,11 @@ class FathomBatchProcessor:
             print(f"   ❌ Erro ao extrair metadados: {str(e)}")
             return None
 
-    async def save_call_metadata(self, title: str) -> None:
+    async def save_call_metadata(self, unique_filename: str) -> None:
         """Salva os metadados da call em arquivo JSON"""
         try:
             # Usar nova estrutura de pastas
-            paths = self._get_video_paths(title)
+            paths = self._get_video_paths(unique_filename)
             html_path = paths['html']
             metadata_path = paths['metadata']
             
@@ -798,17 +807,17 @@ class FathomBatchProcessor:
             remaining_mins = minutes % 60
             return f"{hours}h {remaining_mins}m"
 
-    def create_unified_output(self, title: str) -> Optional[Dict[str, Any]]:
+    def create_unified_output(self, unique_filename: str) -> Optional[Dict[str, Any]]:
         """Cria estrutura unificada combinando metadados do Fathom com transcrição do AssemblyAI"""
         try:
             # Carregar arquivos usando nova estrutura
-            paths = self._get_video_paths(title)
+            paths = self._get_video_paths(unique_filename)
             metadata_path = paths['metadata']
             speakers_path = paths['speakers_json']
             html_path = paths['html']
             
             if not all([metadata_path.exists(), speakers_path.exists(), html_path.exists()]):
-                print(f"   ⚠️  Arquivos necessários não encontrados para {title}")
+                print(f"   ⚠️  Arquivos necessários não encontrados para {unique_filename}")
                 return None
             
             # Carregar dados
@@ -933,17 +942,17 @@ class FathomBatchProcessor:
             print(f"   ❌ Erro ao criar estrutura unificada: {str(e)}")
             return None
 
-    async def save_unified_output(self, title: str) -> None:
+    async def save_unified_output(self, unique_filename: str) -> None:
         """Salva a estrutura unificada e a transcrição do Fathom separadamente"""
         try:
             # Criar estrutura unificada
-            unified_data = self.create_unified_output(title)
+            unified_data = self.create_unified_output(unique_filename)
             
             if not unified_data:
                 return
             
             # Usar nova estrutura de pastas
-            paths = self._get_video_paths(title)
+            paths = self._get_video_paths(unique_filename)
             final_path = paths['final']  # Fica na raiz
             with open(final_path, 'w', encoding='utf-8') as f:
                 json.dump(unified_data, f, indent=2, ensure_ascii=False)
