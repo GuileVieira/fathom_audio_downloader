@@ -75,14 +75,21 @@ class FathomBatchProcessor:
         """Remove caracteres inválidos do nome do arquivo"""
         return re.sub(r'[<>:"/\\|?*]', '_', filename).strip()
     
-    def _create_unique_filename(self, title: str, video_id: str) -> str:
-        """Cria nome único combinando título sanitizado + ID da meeting"""
+    def _create_unique_filename(self, title: str, video_id: str, date_formatted: Optional[str] = None) -> str:
+        """Cria nome único combinando título sanitizado + data + ID da meeting"""
         sanitized_title = self._sanitize_filename(title)
-        # Limita o título a 100 caracteres para evitar nomes muito longos
-        if len(sanitized_title) > 100:
-            sanitized_title = sanitized_title[:100].rstrip('_')
+        # Limita o título a 80 caracteres para dar espaço para data e ID
+        if len(sanitized_title) > 80:
+            sanitized_title = sanitized_title[:80].rstrip('_')
         
-        return f"{sanitized_title}_{video_id}"
+        # Se não tiver data, tenta extrair do video_data ou usa data atual
+        if date_formatted:
+            return f"{sanitized_title}_{date_formatted}_{video_id}"
+        else:
+            # Fallback para data atual se não conseguir extrair
+            from datetime import datetime
+            current_date = datetime.now().strftime('%Y-%m-%d')
+            return f"{sanitized_title}_{current_date}_{video_id}"
     
     def _get_video_dir(self, unique_filename: str) -> Path:
         """Retorna o diretório específico do vídeo"""
@@ -116,7 +123,26 @@ class FathomBatchProcessor:
         """Processa um vídeo individual"""
         video_id = str(video_data['id'])
         title = video_data['title']
-        unique_filename = self._create_unique_filename(title, video_id)
+        
+        # Extrair data formatada do video_data
+        date_formatted = video_data.get('date_formatted')
+        if not date_formatted and 'date' in video_data:
+            # Tentar extrair data de outros campos
+            date_str = video_data['date']
+            try:
+                from datetime import datetime
+                # Tentar diferentes formatos de data
+                for fmt in ['%b %d, %Y', '%Y-%m-%d', '%d/%m/%Y']:
+                    try:
+                        dt = datetime.strptime(date_str, fmt)
+                        date_formatted = dt.strftime('%Y-%m-%d')
+                        break
+                    except ValueError:
+                        continue
+            except:
+                pass
+        
+        unique_filename = self._create_unique_filename(title, video_id, date_formatted)
         url = video_data['url']
         
         # Pula se já foi processado
