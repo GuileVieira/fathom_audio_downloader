@@ -981,6 +981,24 @@ class FathomBatchProcessor:
                 
                 print(f"   📄 Transcrição Fathom salva: {fathom_transcript_path.name} e {fathom_text_path.name}")
             
+            # 🆕 HOOK: Salvar no banco de dados automaticamente
+            try:
+                from database_manager import get_database_manager
+                db_manager = get_database_manager()
+                
+                if db_manager.is_connected():
+                    success = db_manager.save_call_data(final_path)
+                    if success:
+                        print(f"   💾 Dados salvos no banco: {title}")
+                    else:
+                        print(f"   ⚠️  Falha ao salvar no banco: {title}")
+                else:
+                    print(f"   ⚠️  Banco não conectado - dados não salvos: {title}")
+            except ImportError:
+                print(f"   ⚠️  Sistema de banco não instalado - dados não salvos")
+            except Exception as db_error:
+                print(f"   ⚠️  Erro ao salvar no banco: {str(db_error)}")
+            
         except Exception as e:
             print(f"   ❌ Erro ao salvar estrutura unificada: {str(e)}")
 

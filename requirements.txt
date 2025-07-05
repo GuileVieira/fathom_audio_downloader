@@ -1,4 +1,18 @@
 playwright
 assemblyai
 python-dotenv
-tqdm 
+tqdm
+# Database - PostgreSQL direto (principal)
+psycopg2-binary
+# Supabase SDK (opcional, para dashboard)
+supabase
+# Data validation e processing
+pydantic
+pandas
+# Analytics e Reports
+matplotlib
+seaborn
+plotly
+# Utilities
+rich
+click 
