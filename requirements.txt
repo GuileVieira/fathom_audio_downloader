@@ -1,13 +1,12 @@
-playwright
-assemblyai
+# Core dependencies
+requests
 python-dotenv
+pydantic
+psycopg2-binary
 tqdm
 # Database - PostgreSQL direto (principal)
-psycopg2-binary
 # Supabase SDK (opcional, para dashboard)
-supabase
 # Data validation e processing
-pydantic
 pandas
 # Analytics e Reports
 matplotlib

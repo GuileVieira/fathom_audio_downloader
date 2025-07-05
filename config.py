@@ -1,85 +1,56 @@
 import os
 from dotenv import load_dotenv
 
-# Carrega as variáveis de ambiente
+# Carrega variáveis de ambiente
 load_dotenv()
 
 class Config:
-    """Configurações do projeto"""
+    """Configurações centralizadas do sistema"""
     
-    # AssemblyAI (existente)
-    ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY', 'sua_chave_aqui')
-    
-    # Supabase (opcional, para dashboard)
-    SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://seu-projeto.supabase.co')
-    SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'sua_chave_anon_aqui')
-    SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', 'sua_chave_service_role_aqui')
-    
-    # PostgreSQL direto (principal)
-    POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'db.seu-projeto.supabase.co')
+    # PostgreSQL direto
+    POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'localhost')
     POSTGRES_PORT = int(os.getenv('POSTGRES_PORT', '5432'))
-    POSTGRES_DB = os.getenv('POSTGRES_DB', 'postgres')
+    POSTGRES_DB = os.getenv('POSTGRES_DB', 'fathom_analytics')
     POSTGRES_USER = os.getenv('POSTGRES_USER', 'postgres')
-    POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'sua_senha_postgres')
+    POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'postgres')
     
-    # Database
-    DATABASE_NAME = os.getenv('DATABASE_NAME', 'fathom_analytics')
-    DATABASE_SCHEMA = os.getenv('DATABASE_SCHEMA', 'public')
+    # Pool de conexões
+    POSTGRES_MIN_CONNECTIONS = int(os.getenv('POSTGRES_MIN_CONNECTIONS', '2'))
+    POSTGRES_MAX_CONNECTIONS = int(os.getenv('POSTGRES_MAX_CONNECTIONS', '10'))
     
-    # Application
-    ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
-    DEBUG = os.getenv('DEBUG', 'true').lower() == 'true'
-    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-    
-    # Paths
-    DOWNLOADS_DIR = 'downloads_batch'
-    COOKIES_DIR = 'cookies'
+    # Timeout de conexão
+    POSTGRES_TIMEOUT = int(os.getenv('POSTGRES_TIMEOUT', '30'))
     
     @classmethod
     def validate(cls):
-        """Valida se as configurações necessárias estão presentes"""
-        missing = []
+        """Valida configurações obrigatórias"""
+        required_configs = []
         
-        # Valida PostgreSQL (principal)
-        if cls.POSTGRES_HOST == 'db.seu-projeto.supabase.co':
-            missing.append('POSTGRES_HOST')
+        # Valida PostgreSQL obrigatório
+        if cls.POSTGRES_HOST == 'localhost' and cls.POSTGRES_PASSWORD == 'postgres':
+            required_configs.append('POSTGRES_HOST')
+            required_configs.append('POSTGRES_PASSWORD')
         
-        if cls.POSTGRES_PASSWORD == 'sua_senha_postgres':
-            missing.append('POSTGRES_PASSWORD')
-        
-        # Valida Supabase (opcional)
-        supabase_missing = []
-        if cls.SUPABASE_URL == 'https://seu-projeto.supabase.co':
-            supabase_missing.append('SUPABASE_URL')
-        
-        if cls.SUPABASE_KEY == 'sua_chave_anon_aqui':
-            supabase_missing.append('SUPABASE_KEY')
-            
-        if missing:
-            print(f"❌ Configurações PostgreSQL faltando no .env: {', '.join(missing)}")
-            print("📝 Configure as variáveis obrigatórias:")
-            print("   POSTGRES_HOST=db.seu-projeto.supabase.co")
-            print("   POSTGRES_PASSWORD=sua_senha_postgres")
+        if required_configs:
+            print("❌ Configurações obrigatórias faltando:")
+            for config in required_configs:
+                print(f"   {config}")
+            print("\n💡 Configure no arquivo .env:")
+            print("   POSTGRES_HOST=seu-host.postgres.com")
+            print("   POSTGRES_PASSWORD=sua_senha_aqui")
             return False
-        
-        if supabase_missing:
-            print(f"⚠️  Configurações Supabase opcionais faltando: {', '.join(supabase_missing)}")
-            print("💡 Para usar dashboard do Supabase, configure também:")
-            print("   SUPABASE_URL=https://seu-projeto.supabase.co")
-            print("   SUPABASE_KEY=sua_chave_anon_aqui")
         
         return True
     
     @classmethod
-    def print_status(cls):
-        """Imprime o status das configurações"""
-        print("🔧 Configurações carregadas:")
-        print(f"   Environment: {cls.ENVIRONMENT}")
-        print(f"   Debug: {cls.DEBUG}")
+    def print_config(cls):
+        """Imprime configurações atuais"""
+        print("\n⚙️  CONFIGURAÇÕES ATUAIS:")
+        print("=" * 40)
         print(f"   PostgreSQL Host: {cls.POSTGRES_HOST}")
+        print(f"   PostgreSQL Port: {cls.POSTGRES_PORT}")
         print(f"   PostgreSQL DB: {cls.POSTGRES_DB}")
         print(f"   PostgreSQL User: {cls.POSTGRES_USER}")
-        print(f"   Supabase URL: {cls.SUPABASE_URL[:30]}...")
-        print(f"   AssemblyAI: {'✅ Configurado' if cls.ASSEMBLYAI_API_KEY != 'sua_chave_aqui' else '❌ Não configurado'}")
-        print(f"   PostgreSQL: {'✅ Configurado' if cls.POSTGRES_PASSWORD != 'sua_senha_postgres' else '❌ Não configurado'}")
-        print(f"   Supabase (opcional): {'✅ Configurado' if cls.SUPABASE_KEY != 'sua_chave_anon_aqui' else '❌ Não configurado'}") 
+        print(f"   Pool Min/Max: {cls.POSTGRES_MIN_CONNECTIONS}/{cls.POSTGRES_MAX_CONNECTIONS}")
+        print(f"   Timeout: {cls.POSTGRES_TIMEOUT}s")
+        print("=" * 40) 
